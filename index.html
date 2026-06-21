@@ -1,297 +1,607 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
-<meta charset="utf-8">
-<title>Motorcycle RPM Analyzer V3</title>
-<style>
-body{font-family:Arial;background:#f3f3f3;margin:15px}
-.panel{background:#fff;padding:12px;border-radius:8px;margin-bottom:10px}
-.row{display:flex;gap:10px;flex-wrap:wrap}
-label{font-size:12px;display:flex;flex-direction:column}
-input{width:90px}
-canvas{width:100%;border:1px solid #aaa;background:#fff}
-table{border-collapse:collapse;width:100%}
-td,th{border:1px solid #ccc;padding:4px}
-.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-</style>
+    <meta charset="utf-8">
+    <title>Motorcycle RPM Analyzer V3</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 12px;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+        *,
+        *:before,
+        *:after {
+            box-sizing: inherit;
+        }
+
+        /* Panel container */
+        .panel {
+            background: #fff;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        h2,
+        h3 {
+            margin-top: 0;
+            color: #1a1a1a;
+        }
+
+        /* Các nhóm nút bấm và điều khiển */
+        div:has(> button) {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid #e5e7eb;
+            margin: 12px 0;
+            width: 100%;
+        }
+
+        /* Inputs Row */
+        .row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            width: 100%;
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #4b5563;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        /* Các thành phần Form & Buttons */
+        button,
+        input[type="file"]::-webkit-file-upload-button {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="number"]:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        /* Responsive Stats Grid */
+        .stat {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+
+        .stat>div {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .stat>div b {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        /* Đồ thị Canvas co giãn tự động */
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: auto !important;
+            max-height: 320px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        /* Bảng dữ liệu tự thích ứng */
+        .panel:has(#peakTable) {
+            overflow-x: auto;
+            /* Tự xuất hiện thanh cuộn ngang trên điện thoại nếu bảng quá dài */
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 400px;
+            /* Đảm bảo không bị bóp nghẹt chữ trên màn hình siêu nhỏ */
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: 600;
+            text-align: left;
+        }
+
+        td,
+        th {
+            border: 1px solid #e2e8f0;
+            padding: 10px 12px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Điểm trạng thái Mic và hiển thị thông tin */
+        #micStatus {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        #micStatus:contains("Recording"),
+        #micStatus:not(:empty):not(html) {
+            /* Hỗ trợ tô màu trạng thái cơ bản */
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        #viewInfo,
+        #liveRPM {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-left: auto;
+        }
+
+        /* Tối ưu hóa riêng cho màn hình Mobile (< 600px) */
+        @media (max-width: 600px) {
+            body {
+                padding: 8px;
+            }
+
+            .panel {
+                padding: 12px;
+            }
+
+            div:has(> button) {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            button {
+                width: 100%;
+                text-align: center;
+            }
+
+            #viewInfo,
+            #liveRPM {
+                margin-left: 0;
+                text-align: center;
+                width: 100%;
+                display: block;
+                margin-top: 4px;
+            }
+        }
+    </style>
 </head>
+
 <body>
+    <div class="panel">
+        <h2>Motorcycle RPM Analyzer V4</h2>
+        <div>
+            <input type="file" id="file" accept="audio/*" style="width: auto;">
+            <button onclick="analyze()">Phân tích File</button>
+            <button onclick="prevView()">◀ Prev</button>
+            <button onclick="nextView()">Next ▶</button>
+            <span id="viewInfo"></span>
+        </div>
+        <hr>
+        <div>
+            <button onclick="startMic()"> 🎤 Start Mic </button>
+            <button onclick="stopMic()"> ⏹ Stop Mic </button>
+            <span id="micStatus">Stopped</span>
+            <span id="liveRPM"></span>
+        </div>
+        <hr>
+        <div class="row">
+            <label>Envelope<input id="envWin" type="number" value="64"></label>
+            <label>Smooth<input id="smooth" type="number" value="15"></label>
+            <label>Threshold<input id="thr" type="number" step="0.1" value="0.75"></label>
+            <label>Peak ms<input id="peakMs" type="number" value="70"></label>
+            <label>View(s)<input id="viewSec" type="number" value="1" step="0.5"></label>
+        </div>
+        <br>
 
-<div class="panel">
-<h2>Motorcycle RPM Analyzer V3</h2>
-<input type="file" id="file" accept="audio/*">
-<div class="row">
-<label>Envelope<input id="envWin" type="number" value="64"></label>
-<label>Smooth<input id="smooth" type="number" value="5"></label>
-<label>Threshold<input id="thr" type="number" step="0.1" value="1.3"></label>
-<label>Peak ms<input id="peakMs" type="number" value="70"></label>
-<div id="liveRPM"></div>
-<label>View(s)<input id="viewSec" type="number" value="1" step="0.5"></label>
-</div>
-<br>
-<button onclick="analyze()">Phân tích File</button>
 
-<button onclick="startMic()">
-🎤 Start Mic
-</button>
+    </div>
 
-<button onclick="stopMic()">
-⏹ Stop Mic
-</button>
+    <div class="panel">
+        <div id="stats" class="stat"></div>
+    </div>
 
-<button onclick="prevView()">◀ Prev</button>
-<button onclick="nextView()">Next ▶</button>
+    <div class="panel">
+        <h3>Envelope + Peaks</h3>
+        <canvas id="envCanvas" width="1400" height="320"></canvas>
+    </div>
 
-<span id="micStatus">
-Stopped
-</span>
-<span id="viewInfo"></span>
-</div>
+    <div class="panel">
+        <h3>FFT Envelope</h3>
+        <canvas id="fftCanvas" width="1400" height="260"></canvas>
+    </div>
 
-<div class="panel">
-<div id="stats" class="stat"></div>
-</div>
+    <div class="panel">
+        <h3>Peak Table</h3>
+        <table id="peakTable">
+            <tr>
+                <th>#</th>
+                <th>Time(s)</th>
+                <th>Period(ms)</th>
+                <th>RPM</th>
+            </tr>
+        </table>
+    </div>
 
-<div class="panel">
-<h3>Envelope + Peaks</h3>
-<canvas id="envCanvas" width="1400" height="320"></canvas>
-</div>
+    <script>
+        let G = {};
 
-<div class="panel">
-<h3>FFT Envelope</h3>
-<canvas id="fftCanvas" width="1400" height="260"></canvas>
-</div>
+        let micContext = null;
+        let analyser = null;
+        let micStream = null;
 
-<div class="panel">
-<h3>Peak Table</h3>
-<table id="peakTable">
-<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>
-</table>
-</div>
+        let realtimeBuffer = [];
 
-<script>
-let G={};
+        function median(a) {
+            let b = [...a].sort((x, y) => x - y);
+            return b[Math.floor(b.length / 2)] || 0;
+        }
 
-let micContext=null;
-let analyser=null;
-let micStream=null;
+        function fftMag(signal) {
+            let N = Math.min(2048, signal.length);
+            let out = [];
+            for (let k = 1; k < N / 2; k++) {
+                let re = 0, im = 0;
+                for (let n = 0; n < N; n++) {
+                    let ang = 2 * Math.PI * k * n / N;
+                    re += signal[n] * Math.cos(ang);
+                    im -= signal[n] * Math.sin(ang);
+                }
+                out.push(Math.sqrt(re * re + im * im));
+            }
+            return out;
+        }
 
-let realtimeBuffer=[];
+        function analyzeSamples(raw, sr) {
 
-function median(a){
- let b=[...a].sort((x,y)=>x-y);
- return b[Math.floor(b.length/2)]||0;
-}
+            const envelopeWindow =
+                Number(document.getElementById("envWin").value);
 
-function fftMag(signal){
- let N=Math.min(2048,signal.length);
- let out=[];
- for(let k=1;k<N/2;k++){
-   let re=0,im=0;
-   for(let n=0;n<N;n++){
-      let ang=2*Math.PI*k*n/N;
-      re+=signal[n]*Math.cos(ang);
-      im-=signal[n]*Math.sin(ang);
-   }
-   out.push(Math.sqrt(re*re+im*im));
- }
- return out;
-}
+            const smoothN =
+                Number(document.getElementById("smooth").value);
 
-function analyzeSamples(raw,sr){
+            const thresholdFactor =
+                Number(document.getElementById("thr").value);
 
- const envelopeWindow =
- Number(document.getElementById("envWin").value);
+            const peakDistanceMs =
+                Number(document.getElementById("peakMs").value);
 
- const smoothN =
- Number(document.getElementById("smooth").value);
+            let envelope = [];
 
- const thresholdFactor =
- Number(document.getElementById("thr").value);
+            for (let i = 0; i < raw.length; i += envelopeWindow) {
 
- const peakDistanceMs =
- Number(document.getElementById("peakMs").value);
+                let s = 0, c = 0;
 
- let envelope=[];
+                for (
+                    let j = i;
+                    j < i + envelopeWindow && j < raw.length;
+                    j++
+                ) {
+                    s += Math.abs(raw[j]);
+                    c++;
+                }
 
- for(let i=0;i<raw.length;i+=envelopeWindow){
+                envelope.push(s / c);
+            }
 
-   let s=0,c=0;
+            let sm = [];
 
-   for(
-      let j=i;
-      j<i+envelopeWindow && j<raw.length;
-      j++
-   ){
-      s+=Math.abs(raw[j]);
-      c++;
-   }
+            for (let i = 0; i < envelope.length; i++) {
 
-   envelope.push(s/c);
- }
+                let s = 0, c = 0;
 
- let sm=[];
+                for (
+                    let j = i - smoothN;
+                    j <= i + smoothN;
+                    j++
+                ) {
 
- for(let i=0;i<envelope.length;i++){
+                    if (
+                        j >= 0 &&
+                        j < envelope.length
+                    ) {
+                        s += envelope[j];
+                        c++;
+                    }
+                }
 
-   let s=0,c=0;
+                sm.push(s / c);
+            }
 
-   for(
-      let j=i-smoothN;
-      j<=i+smoothN;
-      j++
-   ){
+            const mean =
+                sm.reduce((a, b) => a + b, 0) / sm.length;
 
-      if(
-         j>=0 &&
-         j<envelope.length
-      ){
-         s+=envelope[j];
-         c++;
-      }
-   }
+            const threshold =
+                mean * thresholdFactor;
 
-   sm.push(s/c);
- }
+            const minDist =
+                Math.floor(
+                    peakDistanceMs / 1000
+                    *
+                    sr / envelopeWindow
+                );
 
- const mean =
- sm.reduce((a,b)=>a+b,0)/sm.length;
+            let peaks = [];
+            let last = -999999;
 
- const threshold =
- mean*thresholdFactor;
+            for (let i = 1; i < sm.length - 1; i++) {
 
- const minDist =
- Math.floor(
-   peakDistanceMs/1000
-   *
-   sr/envelopeWindow
- );
+                if (
+                    sm[i] > threshold &&
+                    sm[i] > sm[i - 1] &&
+                    sm[i] > sm[i + 1]
+                ) {
 
- let peaks=[];
- let last=-999999;
+                    if (i - last > minDist) {
 
- for(let i=1;i<sm.length-1;i++){
+                        peaks.push(i);
+                        last = i;
+                    }
+                }
+            }
 
-   if(
-      sm[i]>threshold &&
-      sm[i]>sm[i-1] &&
-      sm[i]>sm[i+1]
-   ){
+            let periods = [];
+let rpms = [];
 
-      if(i-last>minDist){
+for(let i=1;i<peaks.length;i++){
 
-         peaks.push(i);
-         last=i;
-      }
-   }
- }
-
- let periods=[];
-
- for(let i=1;i<peaks.length;i++){
-
-    periods.push(
+   let period =
       (peaks[i]-peaks[i-1])
       *
       envelopeWindow
       /
-      sr
-    );
- }
+      sr;
 
- const medPeriod =
- median(periods);
+   periods.push(period);
 
- const peakFreq =
- medPeriod
- ? 1/medPeriod
- : 0;
-
- const rpm120 =
- peakFreq*120;
-
- const rpm240 =
- peakFreq*240;
-
- return {
-   sm,
-   peaks,
-   threshold,
-   peakFreq,
-   rpm120,
-   rpm240,
-   duration:raw.length/sr,
-   sr,
-   envelopeWindow
- };
+   rpms.push(
+      120 / period
+   );
 }
 
-function updateUI(result){
+            const medPeriod =
+                median(periods);
 
- G={
-   ...result,
-   start:0
- };
+            const peakFreq =
+                medPeriod
+                    ? 1 / medPeriod
+                    : 0;
 
- renderStats({
-   sampleRate:result.sr,
-   duration:result.duration,
-   peakCount:result.peaks.length,
-   medPeriod:
-      result.peakFreq
-      ?1000/result.peakFreq
-      :0,
-   peakFreq:result.peakFreq,
-   fftFreq:0,
-   rpm120:result.rpm120,
-   rpm240:result.rpm240
- });
+            const rpm120 =
+                peakFreq * 120;
 
- drawEnvelope();
-	
-	document.getElementById(
- "liveRPM"
-).innerHTML =
+            const rpm240 =
+                peakFreq * 240;
 
-`RPM x120:
- ${result.rpm120.toFixed(0)}
- <br>
- Peak:
- ${result.peakFreq.toFixed(2)} Hz`;
-}
+            const fft = fftMag(sm);
 
-async function analyze(){
+            let maxI = 0;
 
- const f=
- document.getElementById("file")
- .files[0];
+            for (let i = 1; i < fft.length; i++) {
 
- if(!f){
-   alert("Chọn file");
-   return;
- }
+                if (fft[i] > fft[maxI])
+                    maxI = i;
+            }
 
- const ctx =
- new AudioContext();
+            const envRate =
+                sr / envelopeWindow;
 
- const ab =
- await f.arrayBuffer();
+            const fftFreq =
+                maxI
+                *
+                envRate
+                /
+                Math.min(
+                    2048,
+                    sm.length
+                );
 
- const audio =
- await ctx.decodeAudioData(ab);
+            return {
 
- const result =
- analyzeSamples(
-   audio.getChannelData(0),
-   audio.sampleRate
- );
+                sm,
 
- updateUI(result);
+                peaks,
 
-}
+                threshold,
 
-function renderStats(s){
- stats.innerHTML=`
+                periods,
+
+                rpms,
+
+                fft,
+
+                fftFreq,
+
+                peakFreq,
+
+                rpm120,
+
+                rpm240,
+
+                duration:
+                    raw.length / sr,
+
+                sr,
+
+                envelopeWindow
+
+            };
+        }
+
+        function updateUI(result) {
+
+            G = {
+                ...result,
+                start: 0
+            };
+
+            renderStats({
+                sampleRate: result.sr,
+                duration: result.duration,
+                peakCount: result.peaks.length,
+                medPeriod:
+                    result.peakFreq
+                        ? 1000 / result.peakFreq
+                        : 0,
+                peakFreq: result.peakFreq,
+                fftFreq: 0,
+                rpm120: result.rpm120,
+                rpm240: result.rpm240
+            });
+
+            buildPeakTable(
+                result.periods,
+                result.rpms
+            );
+
+            drawEnvelope();
+
+            drawFFT();
+
+            document.getElementById("liveRPM").innerHTML =
+                `RPM x120: ${result.rpm120.toFixed(0)} / Peak: ${result.peakFreq.toFixed(2)} Hz`;
+        }
+
+        async function analyze() {
+
+            const f =
+                document.getElementById("file")
+                    .files[0];
+
+            if (!f) {
+                alert("Chọn file");
+                return;
+            }
+
+            const ctx =
+                new AudioContext();
+
+            const ab =
+                await f.arrayBuffer();
+
+            const audio =
+                await ctx.decodeAudioData(ab);
+
+            const result =
+                analyzeSamples(
+                    audio.getChannelData(0),
+                    audio.sampleRate
+                );
+
+            updateUI(result);
+
+        }
+
+        function buildPeakTable(
+            periods,
+            rpms
+        ) {
+
+            peakTable.innerHTML =
+                "<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>";
+
+            G.peaks.forEach((p, i) => {
+
+                const t =
+                    (
+                        p *
+                        G.envelopeWindow /
+                        G.sr
+                    ).toFixed(3);
+
+                const period =
+                    i
+                        ?
+                        (
+                            periods[i - 1]
+                            *
+                            1000
+                        ).toFixed(1)
+                        :
+                        "";
+
+                const rpm =
+                    i
+                        ?
+                        rpms[i - 1]
+                            .toFixed(0)
+                        :
+                        "";
+
+                peakTable.innerHTML +=
+
+                    `<tr>
+      <td>${i + 1}</td>
+      <td>${t}</td>
+      <td>${period}</td>
+      <td>${rpm}</td>
+    </tr>`;
+            });
+
+        }
+
+        function renderStats(s) {
+            stats.innerHTML = `
  <div><b>Sample Rate</b><br>${s.sampleRate.toFixed(0)} Hz</div>
  <div><b>Duration</b><br>${s.duration.toFixed(3)} s</div>
  <div><b>Detected Peaks</b><br>${s.peakCount}</div>
@@ -301,201 +611,202 @@ function renderStats(s){
  <div><b>RPM x120</b><br>${s.rpm120.toFixed(0)}</div>
  <div><b>RPM x240</b><br>${s.rpm240.toFixed(0)}</div>
  `;
-}
+        }
 
-function buildTable(periods,rpms){
- peakTable.innerHTML="<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>";
- G.peaks.forEach((p,i)=>{
-   let t=(p*G.envelopeWindow/G.sr).toFixed(3);
-   let per=i? (periods[i-1]*1000).toFixed(1):"";
-   let rpm=i? rpms[i-1].toFixed(0):"";
-   peakTable.innerHTML += `<tr><td>${i+1}</td><td>${t}</td><td>${per}</td><td>${rpm}</td></tr>`;
- });
-}
+        function buildTable(periods, rpms) {
+            peakTable.innerHTML = "<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>";
+            G.peaks.forEach((p, i) => {
+                let t = (p * G.envelopeWindow / G.sr).toFixed(3);
+                let per = i ? (periods[i - 1] * 1000).toFixed(1) : "";
+                let rpm = i ? rpms[i - 1].toFixed(0) : "";
+                peakTable.innerHTML += `<tr><td>${i + 1}</td><td>${t}</td><td>${per}</td><td>${rpm}</td></tr>`;
+            });
+        }
 
-function drawEnvelope(){
- let c=envCanvas,ctx=c.getContext("2d");
- ctx.clearRect(0,0,c.width,c.height);
+        function drawEnvelope() {
+            let c = envCanvas, ctx = c.getContext("2d");
+            ctx.clearRect(0, 0, c.width, c.height);
 
-let win =
-Number(
- document.getElementById("viewSec").value
-);
- let end=G.start+win;
+            let win =
+                Number(
+                    document.getElementById("viewSec").value
+                );
+            let end = G.start + win;
 
- viewInfo.textContent=`${G.start.toFixed(2)}s → ${Math.min(end,G.duration).toFixed(2)}s`;
+            viewInfo.textContent = `${G.start.toFixed(2)}s → ${Math.min(end, G.duration).toFixed(2)}s`;
 
- let sIdx=Math.floor(G.start*G.sr/G.envelopeWindow);
- let eIdx=Math.min(G.sm.length,Math.floor(end*G.sr/G.envelopeWindow));
+            let sIdx = Math.floor(G.start * G.sr / G.envelopeWindow);
+            let eIdx = Math.min(G.sm.length, Math.floor(end * G.sr / G.envelopeWindow));
 
- let arr=G.sm.slice(sIdx,eIdx);
- if(!arr.length)return;
+            let arr = G.sm.slice(sIdx, eIdx);
+            if (!arr.length) return;
 
- let max=G.threshold;
- for(let v of arr) if(v>max) max=v;
+            let max = G.threshold;
+            for (let v of arr) if (v > max) max = v;
 
- ctx.beginPath();
- arr.forEach((v,i)=>{
-   let x=i*c.width/arr.length;
-   let y=c.height-(v/max)*c.height;
-   i?ctx.lineTo(x,y):ctx.moveTo(x,y);
- });
- ctx.stroke();
+            ctx.beginPath();
+            arr.forEach((v, i) => {
+                let x = i * c.width / arr.length;
+                let y = c.height - (v / max) * c.height;
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            });
+            ctx.stroke();
 
- let ty=c.height-(G.threshold/max)*c.height;
- ctx.beginPath();
- ctx.moveTo(0,ty);
- ctx.lineTo(c.width,ty);
- ctx.stroke();
+            let ty = c.height - (G.threshold / max) * c.height;
+            ctx.beginPath();
+            ctx.moveTo(0, ty);
+            ctx.lineTo(c.width, ty);
+            ctx.stroke();
 
- G.peaks.forEach((p,idx)=>{
-   if(p>=sIdx && p<eIdx){
-      let x=(p-sIdx)*c.width/arr.length;
-      ctx.beginPath();
-      ctx.moveTo(x,0);
-      ctx.lineTo(x,c.height);
-      ctx.stroke();
-      ctx.fillText(idx+1,x+2,12);
-   }
- });
-}
+            G.peaks.forEach((p, idx) => {
+                if (p >= sIdx && p < eIdx) {
+                    let x = (p - sIdx) * c.width / arr.length;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, c.height);
+                    ctx.stroke();
+                    ctx.fillText(idx + 1, x + 2, 12);
+                }
+            });
+        }
 
-function drawFFT(){
- let c=fftCanvas,ctx=c.getContext("2d");
- ctx.clearRect(0,0,c.width,c.height);
- if(!G.fft)return;
+        function drawFFT() {
+            let c = fftCanvas, ctx = c.getContext("2d");
+            ctx.clearRect(0, 0, c.width, c.height);
+            if (!G.fft) return;
 
- let max=Math.max(...G.fft);
- ctx.beginPath();
- G.fft.forEach((v,i)=>{
-   let x=i*c.width/G.fft.length;
-   let y=c.height-(v/max)*c.height;
-   i?ctx.lineTo(x,y):ctx.moveTo(x,y);
- });
- ctx.stroke();
-}
+            let max = Math.max(...G.fft);
+            ctx.beginPath();
+            G.fft.forEach((v, i) => {
+                let x = i * c.width / G.fft.length;
+                let y = c.height - (v / max) * c.height;
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            });
+            ctx.stroke();
+        }
 
-async function startMic(){
+        async function startMic() {
 
- micContext =
- new AudioContext();
+            micContext =
+                new AudioContext();
 
- micStream =
- await navigator.mediaDevices
- .getUserMedia({
-   audio:true
- });
+            micStream =
+                await navigator.mediaDevices
+                    .getUserMedia({
+                        audio: true
+                    });
 
- const source =
- micContext
- .createMediaStreamSource(
-   micStream
- );
+            const source =
+                micContext
+                    .createMediaStreamSource(
+                        micStream
+                    );
 
- const hp =
- micContext
- .createBiquadFilter();
+            const hp =
+                micContext
+                    .createBiquadFilter();
 
- hp.type="highpass";
- hp.frequency.value=15;
+            hp.type = "highpass";
+            hp.frequency.value = 15;
 
- const lp =
- micContext
- .createBiquadFilter();
+            const lp =
+                micContext
+                    .createBiquadFilter();
 
- lp.type="lowpass";
- lp.frequency.value=80;
+            lp.type = "lowpass";
+            lp.frequency.value = 80;
 
- analyser =
- micContext
- .createAnalyser();
+            analyser =
+                micContext
+                    .createAnalyser();
 
- analyser.fftSize=4096;
+            analyser.fftSize = 4096;
 
- source.connect(hp);
- hp.connect(lp);
- lp.connect(analyser);
+            source.connect(hp);
+            hp.connect(lp);
+            lp.connect(analyser);
 
- realtimeBuffer=[];
+            realtimeBuffer = [];
 
- micStatus.textContent=
- "Recording";
+            micStatus.textContent =
+                "Recording";
 
- realtimeLoop();
+            realtimeLoop();
 
-}
+        }
 
-function stopMic(){
+        function stopMic() {
 
- if(micStream){
+            if (micStream) {
 
-   micStream
-   .getTracks()
-   .forEach(t=>t.stop());
- }
+                micStream
+                    .getTracks()
+                    .forEach(t => t.stop());
+            }
 
- analyser=null;
+            analyser = null;
 
- micStatus.textContent=
- "Stopped";
-}
+            micStatus.textContent =
+                "Stopped";
+        }
 
-function realtimeLoop(){
+        function realtimeLoop() {
 
- if(!analyser)
-   return;
+            if (!analyser)
+                return;
 
- const buf =
- new Float32Array(
-   analyser.fftSize
- );
+            const buf =
+                new Float32Array(
+                    analyser.fftSize
+                );
 
- analyser
- .getFloatTimeDomainData(
-    buf
- );
+            analyser
+                .getFloatTimeDomainData(
+                    buf
+                );
 
- realtimeBuffer.push(
-   ...buf
- );
+            realtimeBuffer.push(
+                ...buf
+            );
 
- const maxSamples =
- 48000*5;
+            const maxSamples =
+                48000 * 5;
 
- if(
-   realtimeBuffer.length >
-   maxSamples
- ){
-   realtimeBuffer =
-   realtimeBuffer.slice(
-     realtimeBuffer.length -
-     maxSamples
-   );
- }
+            if (
+                realtimeBuffer.length >
+                maxSamples
+            ) {
+                realtimeBuffer =
+                    realtimeBuffer.slice(
+                        realtimeBuffer.length -
+                        maxSamples
+                    );
+            }
 
- const result =
- analyzeSamples(
-    Float32Array.from(
-      realtimeBuffer
-    ),
-    48000
- );
+            const result =
+                analyzeSamples(
+                    Float32Array.from(
+                        realtimeBuffer
+                    ),
+                    48000
+                );
 
- updateUI(result);
+            updateUI(result);
 
- requestAnimationFrame(
-    realtimeLoop
- );
-}
+            requestAnimationFrame(
+                realtimeLoop
+            );
+        }
 
-function prevView(){
- G.start=Math.max(0,(G.start||0)-(+viewSec.value));
- drawEnvelope();
-}
-function nextView(){
- G.start=Math.min(Math.max(0,G.duration-(+viewSec.value)),(G.start||0)+(+viewSec.value));
- drawEnvelope();
-}
-</script>
+        function prevView() {
+            G.start = Math.max(0, (G.start || 0) - (+viewSec.value));
+            drawEnvelope();
+        }
+        function nextView() {
+            G.start = Math.min(Math.max(0, G.duration - (+viewSec.value)), (G.start || 0) + (+viewSec.value));
+            drawEnvelope();
+        }
+    </script>
 </body>
+
 </html>
