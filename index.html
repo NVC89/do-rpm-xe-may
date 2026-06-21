@@ -257,7 +257,7 @@
         </div>
         <hr>
         <div class="row">
-            <label>Envelope<input id="envWin" type="number" value="64"></label>
+            <label>Envelope<input id="envWin" type="number" value="32"></label>
             <label>Smooth<input id="smooth" type="number" value="15"></label>
             <label>Threshold<input id="thr" type="number" step="0.1" value="0.75"></label>
             <label>Peak ms<input id="peakMs" type="number" value="70"></label>
@@ -326,26 +326,14 @@
             return out;
         }
 
-        function analyzeSamples(raw, sr) {
-
-            const envelopeWindow =
-                Number(document.getElementById("envWin").value);
-
-            const smoothN =
-                Number(document.getElementById("smooth").value);
-
-            const thresholdFactor =
-                Number(document.getElementById("thr").value);
-
-            const peakDistanceMs =
-                Number(document.getElementById("peakMs").value);
-
-            let envelope = [];
-
-            for (let i = 0; i < raw.length; i += envelopeWindow) {
-
-                let s = 0, c = 0;
-
+        function analyzeSamples(raw, sr) { 
+            const envelopeWindow = Number(document.getElementById("envWin").value); 
+            const smoothN = Number(document.getElementById("smooth").value); 
+            const thresholdFactor = Number(document.getElementById("thr").value); 
+            const peakDistanceMs = Number(document.getElementById("peakMs").value); 
+            let envelope = []; 
+            for (let i = 0; i < raw.length; i += envelopeWindow) { 
+                let s = 0, c = 0; 
                 for (
                     let j = i;
                     j < i + envelopeWindow && j < raw.length;
@@ -398,23 +386,16 @@
             let peaks = [];
             let last = -999999;
 
-            for (let i = 1; i < sm.length - 1; i++) {
-
-                if (
-                    sm[i] > threshold &&
-                    sm[i] > sm[i - 1] &&
-                    sm[i] > sm[i + 1]
-                ) {
-
-                    if (i - last > minDist) {
-
+            for (let i = 1; i < sm.length - 1; i++) { 
+                if ( sm[i] > threshold && sm[i] > sm[i - 1] && sm[i] > sm[i + 1] ) { 
+                    if (i - last > minDist) { 
                         peaks.push(i);
                         last = i;
                     }
                 }
             }
 
-            let periods = [];
+let periods = [];
 let rpms = [];
 
 for(let i=1;i<peaks.length;i++){
@@ -433,42 +414,18 @@ for(let i=1;i<peaks.length;i++){
    );
 }
 
-            const medPeriod =
-                median(periods);
-
-            const peakFreq =
-                medPeriod
-                    ? 1 / medPeriod
-                    : 0;
-
-            const rpm120 =
-                peakFreq * 120;
-
-            const rpm240 =
-                peakFreq * 240;
-
-            const fft = fftMag(sm);
-
-            let maxI = 0;
-
-            for (let i = 1; i < fft.length; i++) {
-
+            const medPeriod = median(periods); 
+            const peakFreq = medPeriod ? 1 / medPeriod : 0; 
+            const rpm120 = peakFreq * 120; 
+            const rpm240 = peakFreq * 240; 
+            const fft = fftMag(sm); 
+            let maxI = 0; 
+            for (let i = 1; i < fft.length; i++) { 
                 if (fft[i] > fft[maxI])
                     maxI = i;
-            }
-
-            const envRate =
-                sr / envelopeWindow;
-
-            const fftFreq =
-                maxI
-                *
-                envRate
-                /
-                Math.min(
-                    2048,
-                    sm.length
-                );
+            } 
+            const envRate = sr / envelopeWindow; 
+            const fftFreq = maxI * envRate / Math.min( 2048, sm.length );
 
             return {
 
@@ -690,53 +647,23 @@ for(let i=1;i<peaks.length;i++){
         }
 
         async function startMic() {
-
-            micContext =
-                new AudioContext();
-
-            micStream =
-                await navigator.mediaDevices
-                    .getUserMedia({
-                        audio: true
-                    });
-
-            const source =
-                micContext
-                    .createMediaStreamSource(
-                        micStream
-                    );
-
-            const hp =
-                micContext
-                    .createBiquadFilter();
-
+            micContext = new AudioContext();
+            micStream = await navigator.mediaDevices.getUserMedia({audio: true});
+            const source = micContext.createMediaStreamSource(micStream);
+            const hp = micContext.createBiquadFilter();
             hp.type = "highpass";
-            hp.frequency.value = 15;
-
-            const lp =
-                micContext
-                    .createBiquadFilter();
-
+            hp.frequency.value = 10;
+            const lp = micContext.createBiquadFilter();
             lp.type = "lowpass";
             lp.frequency.value = 80;
-
-            analyser =
-                micContext
-                    .createAnalyser();
-
+            analyser = micContext.createAnalyser();
             analyser.fftSize = 4096;
-
             source.connect(hp);
             hp.connect(lp);
             lp.connect(analyser);
-
             realtimeBuffer = [];
-
-            micStatus.textContent =
-                "Recording";
-
+            micStatus.textContent = "Recording";
             realtimeLoop();
-
         }
 
         function stopMic() {
@@ -774,12 +701,13 @@ for(let i=1;i<peaks.length;i++){
                 lastUpdate = now;
             }
 
-            requestAnimationFrame(realtimeLoop);
-
             if(now - lastFFT > 500) {
                 drawFFT();
-                lastFFT = performance.now();
+                drawEnvelope();
+                lastFFT = now;
             }
+
+            requestAnimationFrame(realtimeLoop);
         }
 
         function prevView() {
