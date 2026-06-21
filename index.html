@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>RPM Analyzer V4</title>
+    <title>RPM Analyzer V4 - Auto Calibration</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -54,7 +54,7 @@
         /* Inputs Row */
         .row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 12px;
             width: 100%;
         }
@@ -90,7 +90,24 @@
             transform: scale(0.98);
         }
 
-        input[type="number"] {
+        button.secondary {
+            background-color: #6b7280;
+        }
+
+        button.secondary:hover {
+            background-color: #4b5563;
+        }
+
+        button.success {
+            background-color: #10b981;
+        }
+
+        button.success:hover {
+            background-color: #059669;
+        }
+
+        input[type="number"],
+        input[type="range"] {
             width: 100%;
             padding: 8px;
             border: 1px solid #d1d5db;
@@ -100,7 +117,14 @@
             transition: border-color 0.2s;
         }
 
-        input[type="number"]:focus {
+        input[type="range"] {
+            padding: 0;
+            height: 6px;
+            cursor: pointer;
+        }
+
+        input[type="number"]:focus,
+        input[type="range"]:focus {
             border-color: #2563eb;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
@@ -130,6 +154,35 @@
             letter-spacing: 0.5px;
         }
 
+        /* Auto Calibration Status */
+        .calibration-status {
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .calibration-status.success {
+            background: #dcfce7;
+            border-color: #bbf7d0;
+            color: #166534;
+        }
+
+        .calibration-status.error {
+            background: #fee2e2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+
+        .calibration-status.info {
+            background: #e0f2fe;
+            border-color: #bae6fd;
+            color: #0c4a6e;
+        }
+
         /* Đồ thị Canvas co giãn tự động */
         canvas {
             display: block;
@@ -144,14 +197,12 @@
         /* Bảng dữ liệu tự thích ứng */
         .panel:has(#peakTable) {
             overflow-x: auto;
-            /* Tự xuất hiện thanh cuộn ngang trên điện thoại nếu bảng quá dài */
         }
 
         table {
             border-collapse: collapse;
             width: 100%;
             min-width: 400px;
-            /* Đảm bảo không bị bóp nghẹt chữ trên màn hình siêu nhỏ */
             font-size: 14px;
         }
 
@@ -175,14 +226,9 @@
         /* Điểm trạng thái Mic và hiển thị thông tin */
         #micStatus {
             font-weight: bold;
-            padding: 2px 8px;
+            padding: 6px 12px;
             border-radius: 4px;
             font-size: 13px;
-        }
-
-        #micStatus:contains("Recording"),
-        #micStatus:not(:empty):not(html) {
-            /* Hỗ trợ tô màu trạng thái cơ bản */
             background: #e0f2fe;
             color: #0369a1;
         }
@@ -193,6 +239,12 @@
             font-weight: 600;
             color: #0f172a;
             margin-left: auto;
+        }
+
+        .param-display {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 2px;
         }
 
         /* Tối ưu hóa riêng cho màn hình Mobile (< 600px) */
@@ -229,7 +281,7 @@
 
 <body>
     <div class="panel">
-        <h2>RPM Analyzer V4</h2>
+        <h2>🔧 RPM Analyzer V4 - Auto Calibration</h2>
         <div>
             <input
                 id="file"
@@ -250,22 +302,45 @@
         </div>
         <hr>
         <div>
-            <button onclick="startMic()"> 🎤 Start Mic </button>
-            <button onclick="stopMic()"> ⏹ Stop Mic </button>
+            <button onclick="startMic()" class="success"> 🎤 Start Mic </button>
+            <button onclick="stopMic()" class="secondary"> ⏹ Stop Mic </button>
             <span id="micStatus">Stopped</span>
             <span id="liveRPM"></span>
         </div>
+
+        <div id="calibrationStatus"></div>
+
         <hr>
+        <h3>Thông số điều chỉnh</h3>
         <div class="row">
-            <label>Envelope<input id="envWin" type="number" value="32"></label>
-            <label>Smooth<input id="smooth" type="number" value="15"></label>
-            <label>Threshold<input id="thr" type="number" step="0.1" value="0.75"></label>
-            <label>Peak ms<input id="peakMs" type="number" value="70"></label>
-            <label>View(s)<input id="viewSec" type="number" value="1" step="0.5"></label>
+            <label>
+                Envelope
+                <input id="envWin" type="number" value="32">
+                <span class="param-display" id="envDisplay"></span>
+            </label>
+            <label>
+                Smooth
+                <input id="smooth" type="number" value="15">
+                <span class="param-display" id="smoothDisplay"></span>
+            </label>
+            <label>
+                Threshold
+                <input id="thr" type="range" min="0.3" max="1.5" step="0.05" value="0.75">
+                <span class="param-display" id="thrDisplay">0.75</span>
+            </label>
+            <label>
+                Peak ms
+                <input id="peakMs" type="number" value="70">
+                <span class="param-display" id="peakMsDisplay"></span>
+            </label>
+            <label>
+                View(s)
+                <input id="viewSec" type="number" value="1" step="0.5">
+                <span class="param-display" id="viewSecDisplay"></span>
+            </label>
         </div>
         <br>
-
-
+        <button onclick="resetParameters()" class="secondary">↻ Reset Parameters</button>
     </div>
 
     <div class="panel">
@@ -273,17 +348,17 @@
     </div>
 
     <div class="panel">
-        <h3>Envelope + Peaks</h3>
+        <h3>📈 Envelope + Peaks</h3>
         <canvas id="envCanvas" width="1400" height="320"></canvas>
     </div>
 
     <div class="panel">
-        <h3>FFT Envelope</h3>
+        <h3>📊 FFT Envelope</h3>
         <canvas id="fftCanvas" width="1400" height="260"></canvas>
     </div>
 
     <div class="panel">
-        <h3>Peak Table</h3>
+        <h3>📋 Peak Table</h3>
         <table id="peakTable">
             <tr>
                 <th>#</th>
@@ -297,18 +372,38 @@
     <script>
         let G = {};
         const MAX_SECONDS = 15;
+        const CALIBRATION_DURATION = 3; // 3 seconds to calibrate
 
         let micContext = null;
         let analyser = null;
         let micStream = null;
         let lastUpdate = 0;
         let lastFFT = 0;
+        let isCalibrating = false;
+        let calibrationTime = 0;
 
         let realtimeBuffer = [];
 
+        // Default parameters
+        const DEFAULT_PARAMS = {
+            envWin: 32,
+            smooth: 15,
+            thr: 0.75,
+            peakMs: 70,
+            viewSec: 1
+        };
+
         function median(a) {
+            if (!a.length) return 0;
             let b = [...a].sort((x, y) => x - y);
             return b[Math.floor(b.length / 2)] || 0;
+        }
+
+        function stddev(a) {
+            if (!a.length) return 0;
+            const mean = a.reduce((x, y) => x + y, 0) / a.length;
+            const variance = a.reduce((x, y) => x + Math.pow(y - mean, 2), 0) / a.length;
+            return Math.sqrt(variance);
         }
 
         function fftMag(signal) {
@@ -395,24 +490,23 @@
                 }
             }
 
-let periods = [];
-let rpms = [];
+            let periods = [];
+            let rpms = [];
 
-for(let i=1;i<peaks.length;i++){
+            for(let i=1;i<peaks.length;i++){
+                let period =
+                    (peaks[i]-peaks[i-1])
+                    *
+                    envelopeWindow
+                    /
+                    sr;
 
-   let period =
-      (peaks[i]-peaks[i-1])
-      *
-      envelopeWindow
-      /
-      sr;
+                periods.push(period);
 
-   periods.push(period);
-
-   rpms.push(
-      120 / period
-   );
-}
+                rpms.push(
+                    120 / period
+                );
+            }
 
             const medPeriod = median(periods); 
             const peakFreq = medPeriod ? 1 / medPeriod : 0; 
@@ -428,35 +522,74 @@ for(let i=1;i<peaks.length;i++){
             const fftFreq = maxI * envRate / Math.min( 2048, sm.length );
 
             return {
-
                 sm,
-
                 peaks,
-
                 threshold,
-
                 periods,
-
                 rpms,
-
                 fft,
-
                 fftFreq,
-
                 peakFreq,
-
                 rpm120,
-
                 rpm240,
-
-                duration:
-                    raw.length / sr,
-
+                duration: raw.length / sr,
                 sr,
-
-                envelopeWindow
-
+                envelopeWindow,
+                rpmStddev: stddev(rpms),
+                peakCount: peaks.length
             };
+        }
+
+        function autoCalibrate(result) {
+            const rpmStddev = result.rpmStddev;
+            const peakCount = result.peakCount;
+            const duration = result.duration;
+
+            // Phát hiện peak giả: số peak quá nhiều trong khoảng thời gian ngắn
+            const peakDensity = peakCount / Math.max(duration, 0.1);
+
+            let recommendations = [];
+            let thrValue = Number(document.getElementById("thr").value);
+            let smoothValue = Number(document.getElementById("smooth").value);
+
+            // 1. Nếu RPM variance cao → có nhiều nhiễu → tăng threshold
+            if (rpmStddev > 200) {
+                if (thrValue < 1.2) {
+                    thrValue = Math.min(1.5, thrValue + 0.1);
+                    recommendations.push("🔊 Nhiễu cao: Tăng Threshold từ " + Number(document.getElementById("thr").value).toFixed(2) + " → " + thrValue.toFixed(2));
+                }
+            }
+
+            // 2. Nếu RPM variance thấp nhưng thiếu peak → hạ threshold
+            if (rpmStddev < 50 && peakCount < 3) {
+                if (thrValue > 0.5) {
+                    thrValue = Math.max(0.3, thrValue - 0.1);
+                    recommendations.push("📉 Peak thiếu: Hạ Threshold từ " + Number(document.getElementById("thr").value).toFixed(2) + " → " + thrValue.toFixed(2));
+                }
+            }
+
+            // 3. Nếu peak density quá cao → tăng smooth hoặc peak ms
+            if (peakDensity > 10) {
+                if (smoothValue < 30) {
+                    smoothValue = Math.min(30, smoothValue + 3);
+                    recommendations.push("📈 Peak quá dày: Tăng Smooth từ " + Number(document.getElementById("smooth").value) + " → " + smoothValue);
+                }
+            }
+
+            // 4. Nếu peak density quá thấp nhưng std cao → giảm smooth
+            if (peakDensity < 2 && rpmStddev > 100) {
+                if (smoothValue > 10) {
+                    smoothValue = Math.max(10, smoothValue - 2);
+                    recommendations.push("↔️ Biểu đồ gồ ghề: Hạ Smooth từ " + Number(document.getElementById("smooth").value) + " → " + smoothValue);
+                }
+            }
+
+            return { thrValue, smoothValue, recommendations };
+        }
+
+        function updateCalibrationStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('calibrationStatus');
+            statusDiv.innerHTML = `<div class="calibration-status ${type}">${message}</div>`;
         }
 
         function updateUI(result) {
@@ -477,7 +610,8 @@ for(let i=1;i<peaks.length;i++){
                 peakFreq: result.peakFreq,
                 fftFreq: result.fftFreq,
                 rpm120: result.rpm120,
-                rpm240: result.rpm240
+                rpm240: result.rpm240,
+                rpmStddev: result.rpmStddev
             });
 
             buildPeakTable(
@@ -490,7 +624,7 @@ for(let i=1;i<peaks.length;i++){
             drawFFT();
 
             document.getElementById("liveRPM").innerHTML =
-                `RPM x120: ${result.rpm120.toFixed(0)} / Peak: ${result.peakFreq.toFixed(2)} Hz`;
+                `RPM x120: ${result.rpm120.toFixed(0)} | Peak: ${result.peakFreq.toFixed(2)} Hz | Stddev: ${result.rpmStddev.toFixed(0)}`;
         }
 
         async function analyze() {
@@ -581,12 +715,15 @@ for(let i=1;i<peaks.length;i++){
  <div><b>FFT Envelope</b><br>${s.fftFreq.toFixed(2)} Hz</div>
  <div><b>RPM x120</b><br>${s.rpm120.toFixed(0)}</div>
  <div><b>RPM x240</b><br>${s.rpm240.toFixed(0)}</div>
+ <div><b>RPM StdDev</b><br>${s.rpmStddev.toFixed(0)}</div>
  `;
         }
 
         function drawEnvelope() {
             let c = envCanvas, ctx = c.getContext("2d");
             ctx.clearRect(0, 0, c.width, c.height);
+
+            if (!G.sm) return;
 
             let win =
                 Number(
@@ -605,6 +742,9 @@ for(let i=1;i<peaks.length;i++){
             let max = G.threshold;
             for (let v of arr) if (v > max) max = v;
 
+            // Draw envelope curve
+            ctx.strokeStyle = "#2563eb";
+            ctx.lineWidth = 2;
             ctx.beginPath();
             arr.forEach((v, i) => {
                 let x = i * c.width / arr.length;
@@ -613,11 +753,22 @@ for(let i=1;i<peaks.length;i++){
             });
             ctx.stroke();
 
+            // Draw threshold line
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
             let ty = c.height - (G.threshold / max) * c.height;
             ctx.beginPath();
             ctx.moveTo(0, ty);
             ctx.lineTo(c.width, ty);
             ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw peaks
+            ctx.strokeStyle = "#10b981";
+            ctx.lineWidth = 2;
+            ctx.fillStyle = "#10b981";
+            ctx.font = "12px sans-serif";
 
             G.peaks.forEach((p, idx) => {
                 if (p >= sIdx && p < eIdx) {
@@ -637,6 +788,8 @@ for(let i=1;i<peaks.length;i++){
             if (!G.fft) return;
 
             let max = Math.max(...G.fft);
+            ctx.strokeStyle = "#8b5cf6";
+            ctx.lineWidth = 2;
             ctx.beginPath();
             G.fft.forEach((v, i) => {
                 let x = i * c.width / G.fft.length;
@@ -647,23 +800,60 @@ for(let i=1;i<peaks.length;i++){
         }
 
         async function startMic() {
-            micContext = new AudioContext();
-            micStream = await navigator.mediaDevices.getUserMedia({audio: true});
-            const source = micContext.createMediaStreamSource(micStream);
-            const hp = micContext.createBiquadFilter();
-            hp.type = "highpass";
-            hp.frequency.value = 10;
-            const lp = micContext.createBiquadFilter();
-            lp.type = "lowpass";
-            lp.frequency.value = 80;
-            analyser = micContext.createAnalyser();
-            analyser.fftSize = 4096;
-            source.connect(hp);
-            hp.connect(lp);
-            lp.connect(analyser);
-            realtimeBuffer = [];
-            micStatus.textContent = "Recording";
-            realtimeLoop();
+            try {
+                micContext =
+                    new AudioContext();
+
+                micStream =
+                    await navigator.mediaDevices
+                        .getUserMedia({
+                            audio: true
+                        });
+
+                const source =
+                    micContext
+                        .createMediaStreamSource(
+                            micStream
+                        );
+
+                const hp =
+                    micContext
+                        .createBiquadFilter();
+
+                hp.type = "highpass";
+                hp.frequency.value = 10;
+
+                const lp =
+                    micContext
+                        .createBiquadFilter();
+
+                lp.type = "lowpass";
+                lp.frequency.value = 200;
+
+                analyser =
+                    micContext
+                        .createAnalyser();
+
+                analyser.fftSize = 4096;
+
+                source.connect(hp);
+                hp.connect(lp);
+                lp.connect(analyser);
+
+                realtimeBuffer = [];
+                isCalibrating = true;
+                calibrationTime = 0;
+
+                micStatus.textContent =
+                    "Recording (Calibrating...)";
+
+                updateCalibrationStatus("🔧 Đang hiệu chỉnh... (3 giây)", 'info');
+
+                realtimeLoop();
+            } catch (err) {
+                alert("Không thể truy cập micro: " + err.message);
+            }
+
         }
 
         function stopMic() {
@@ -676,9 +866,12 @@ for(let i=1;i<peaks.length;i++){
             }
 
             analyser = null;
+            isCalibrating = false;
 
             micStatus.textContent =
                 "Stopped";
+            
+            updateCalibrationStatus("");
         }
 
         function realtimeLoop() {
@@ -695,8 +888,35 @@ for(let i=1;i<peaks.length;i++){
             }
 
             const now = performance.now();
+            
             if(now - lastUpdate > 500){
                 const result = analyzeSamples(Float32Array.from(realtimeBuffer), micContext.sampleRate);
+                
+                // Auto-calibration during first 3 seconds
+                if (isCalibrating) {
+                    calibrationTime += 0.5;
+                    if (calibrationTime >= CALIBRATION_DURATION) {
+                        const calibration = autoCalibrate(result);
+                        
+                        document.getElementById("thr").value = calibration.thrValue.toFixed(2);
+                        document.getElementById("smooth").value = calibration.smoothValue;
+                        
+                        let message = "✅ Hiệu chỉnh hoàn tất!<br>";
+                        if (calibration.recommendations.length > 0) {
+                            message += calibration.recommendations.join("<br>");
+                        } else {
+                            message += "Thông số tối ưu!";
+                        }
+                        
+                        updateCalibrationStatus(message, 'success');
+                        isCalibrating = false;
+                        micStatus.textContent = "Recording (Live)";
+                    } else {
+                        const progress = Math.round((calibrationTime / CALIBRATION_DURATION) * 100);
+                        updateCalibrationStatus(`🔧 Đang hiệu chỉnh... ${progress}% (Phát hiện ${result.peakCount} peaks, Stddev: ${result.rpmStddev.toFixed(0)})`, 'info');
+                    }
+                }
+                
                 updateUI(result);
                 lastUpdate = now;
             }
@@ -711,14 +931,62 @@ for(let i=1;i<peaks.length;i++){
         }
 
         function prevView() {
+            if (!G.duration) return;
             G.start = Math.max(0, (G.start || 0) - (+viewSec.value));
             drawEnvelope();
         }
 
         function nextView() {
+            if (!G.duration) return;
             G.start = Math.min(Math.max(0, G.duration - (+viewSec.value)), (G.start || 0) + (+viewSec.value));
             drawEnvelope();
         }
+
+        function resetParameters() {
+            document.getElementById("envWin").value = DEFAULT_PARAMS.envWin;
+            document.getElementById("smooth").value = DEFAULT_PARAMS.smooth;
+            document.getElementById("thr").value = DEFAULT_PARAMS.thr;
+            document.getElementById("peakMs").value = DEFAULT_PARAMS.peakMs;
+            document.getElementById("viewSec").value = DEFAULT_PARAMS.viewSec;
+            
+            updateCalibrationStatus("");
+            
+            // Re-analyze if data exists
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        }
+
+        // Update display values in real-time
+        document.getElementById("thr").addEventListener("input", function() {
+            document.getElementById("thrDisplay").textContent = this.value;
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
+        document.getElementById("envWin").addEventListener("change", function() {
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
+        document.getElementById("smooth").addEventListener("change", function() {
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
+        document.getElementById("peakMs").addEventListener("change", function() {
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
     </script>
 </body>
 
