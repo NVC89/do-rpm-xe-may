@@ -25,12 +25,26 @@ td,th{border:1px solid #ccc;padding:4px}
 <label>Smooth<input id="smooth" type="number" value="5"></label>
 <label>Threshold<input id="thr" type="number" step="0.1" value="1.3"></label>
 <label>Peak ms<input id="peakMs" type="number" value="70"></label>
+<div id="liveRPM"></div>
 <label>View(s)<input id="viewSec" type="number" value="1" step="0.5"></label>
 </div>
 <br>
-<button onclick="analyze()">Phân tích</button>
+<button onclick="analyze()">Phân tích File</button>
+
+<button onclick="startMic()">
+🎤 Start Mic
+</button>
+
+<button onclick="stopMic()">
+⏹ Stop Mic
+</button>
+
 <button onclick="prevView()">◀ Prev</button>
 <button onclick="nextView()">Next ▶</button>
+
+<span id="micStatus">
+Stopped
+</span>
 <span id="viewInfo"></span>
 </div>
 
@@ -58,6 +72,12 @@ td,th{border:1px solid #ccc;padding:4px}
 <script>
 let G={};
 
+let micContext=null;
+let analyser=null;
+let micStream=null;
+
+let realtimeBuffer=[];
+
 function median(a){
  let b=[...a].sort((x,y)=>x-y);
  return b[Math.floor(b.length/2)]||0;
@@ -78,110 +98,196 @@ function fftMag(signal){
  return out;
 }
 
-async function analyze(){
- const f=document.getElementById("file").files[0];
- if(!f){alert("Chọn file");return;}
-
- const ctx=new AudioContext();
- const ab=await f.arrayBuffer();
- const audio=await ctx.decodeAudioData(ab);
-
- const raw=audio.getChannelData(0);
- const sr=audio.sampleRate;
+function analyzeSamples(raw,sr){
 
  const envelopeWindow =
-Number(
- document.getElementById("envWin").value
-);
+ Number(document.getElementById("envWin").value);
+
  const smoothN =
-Number(
- document.getElementById("smooth").value
-);
+ Number(document.getElementById("smooth").value);
+
  const thresholdFactor =
-Number(
- document.getElementById("thr").value
-);
+ Number(document.getElementById("thr").value);
+
+ const peakDistanceMs =
+ Number(document.getElementById("peakMs").value);
 
  let envelope=[];
+
  for(let i=0;i<raw.length;i+=envelopeWindow){
+
    let s=0,c=0;
-   for(let j=i;j<i+envelopeWindow && j<raw.length;j++){
+
+   for(
+      let j=i;
+      j<i+envelopeWindow && j<raw.length;
+      j++
+   ){
       s+=Math.abs(raw[j]);
       c++;
    }
+
    envelope.push(s/c);
  }
 
  let sm=[];
+
  for(let i=0;i<envelope.length;i++){
+
    let s=0,c=0;
-   for(let j=i-smoothN;j<=i+smoothN;j++){
-      if(j>=0 && j<envelope.length){s+=envelope[j];c++;}
+
+   for(
+      let j=i-smoothN;
+      j<=i+smoothN;
+      j++
+   ){
+
+      if(
+         j>=0 &&
+         j<envelope.length
+      ){
+         s+=envelope[j];
+         c++;
+      }
    }
+
    sm.push(s/c);
  }
 
- const mean=sm.reduce((a,b)=>a+b,0)/sm.length;
- const threshold=mean*thresholdFactor;
+ const mean =
+ sm.reduce((a,b)=>a+b,0)/sm.length;
 
- const minDist=Math.floor((+peakMs.value/1000)*(sr/envelopeWindow));
+ const threshold =
+ mean*thresholdFactor;
+
+ const minDist =
+ Math.floor(
+   peakDistanceMs/1000
+   *
+   sr/envelopeWindow
+ );
 
  let peaks=[];
  let last=-999999;
 
  for(let i=1;i<sm.length-1;i++){
-   if(sm[i]>threshold && sm[i]>sm[i-1] && sm[i]>sm[i+1]){
+
+   if(
+      sm[i]>threshold &&
+      sm[i]>sm[i-1] &&
+      sm[i]>sm[i+1]
+   ){
+
       if(i-last>minDist){
-        peaks.push(i);
-        last=i;
+
+         peaks.push(i);
+         last=i;
       }
    }
  }
 
  let periods=[];
- let rpms=[];
 
  for(let i=1;i<peaks.length;i++){
-   let p=(peaks[i]-peaks[i-1])*envelopeWindow/sr;
-   periods.push(p);
-   rpms.push(120/p);
+
+    periods.push(
+      (peaks[i]-peaks[i-1])
+      *
+      envelopeWindow
+      /
+      sr
+    );
  }
 
- const medPeriod=median(periods);
- const peakFreq=medPeriod?1/medPeriod:0;
- const rpm120=peakFreq*120;
- const rpm240=peakFreq*240;
+ const medPeriod =
+ median(periods);
 
- const fft=fftMag(sm);
- let maxI=0;
- for(let i=1;i<fft.length;i++){
-   if(fft[i]>fft[maxI]) maxI=i;
- }
+ const peakFreq =
+ medPeriod
+ ? 1/medPeriod
+ : 0;
 
- const envRate=sr/envelopeWindow;
- const fftFreq=maxI*envRate/Math.min(2048,sm.length);
+ const rpm120 =
+ peakFreq*120;
+
+ const rpm240 =
+ peakFreq*240;
+
+ return {
+   sm,
+   peaks,
+   threshold,
+   peakFreq,
+   rpm120,
+   rpm240,
+   duration:raw.length/sr,
+   sr,
+   envelopeWindow
+ };
+}
+
+function updateUI(result){
 
  G={
-   sm, peaks, threshold, sr, envelopeWindow,
-   duration:raw.length/sr,
-   start:0,
-   fft, fftFreq
+   ...result,
+   start:0
  };
 
  renderStats({
-   sampleRate:sr,
-   duration:G.duration,
-   peakCount:peaks.length,
-   medPeriod:medPeriod*1000,
-   peakFreq,
-   fftFreq,
-   rpm120,
-   rpm240
+   sampleRate:result.sr,
+   duration:result.duration,
+   peakCount:result.peaks.length,
+   medPeriod:
+      result.peakFreq
+      ?1000/result.peakFreq
+      :0,
+   peakFreq:result.peakFreq,
+   fftFreq:0,
+   rpm120:result.rpm120,
+   rpm240:result.rpm240
  });
 
- buildTable(periods,rpms);
  drawEnvelope();
- drawFFT();
+	
+	document.getElementById(
+ "liveRPM"
+).innerHTML =
+
+`RPM x120:
+ ${result.rpm120.toFixed(0)}
+ <br>
+ Peak:
+ ${result.peakFreq.toFixed(2)} Hz`;
+}
+
+async function analyze(){
+
+ const f=
+ document.getElementById("file")
+ .files[0];
+
+ if(!f){
+   alert("Chọn file");
+   return;
+ }
+
+ const ctx =
+ new AudioContext();
+
+ const ab =
+ await f.arrayBuffer();
+
+ const audio =
+ await ctx.decodeAudioData(ab);
+
+ const result =
+ analyzeSamples(
+   audio.getChannelData(0),
+   audio.sampleRate
+ );
+
+ updateUI(result);
+
 }
 
 function renderStats(s){
@@ -267,6 +373,119 @@ function drawFFT(){
    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
  });
  ctx.stroke();
+}
+
+async function startMic(){
+
+ micContext =
+ new AudioContext();
+
+ micStream =
+ await navigator.mediaDevices
+ .getUserMedia({
+   audio:true
+ });
+
+ const source =
+ micContext
+ .createMediaStreamSource(
+   micStream
+ );
+
+ const hp =
+ micContext
+ .createBiquadFilter();
+
+ hp.type="highpass";
+ hp.frequency.value=15;
+
+ const lp =
+ micContext
+ .createBiquadFilter();
+
+ lp.type="lowpass";
+ lp.frequency.value=80;
+
+ analyser =
+ micContext
+ .createAnalyser();
+
+ analyser.fftSize=4096;
+
+ source.connect(hp);
+ hp.connect(lp);
+ lp.connect(analyser);
+
+ realtimeBuffer=[];
+
+ micStatus.textContent=
+ "Recording";
+
+ realtimeLoop();
+
+}
+
+function stopMic(){
+
+ if(micStream){
+
+   micStream
+   .getTracks()
+   .forEach(t=>t.stop());
+ }
+
+ analyser=null;
+
+ micStatus.textContent=
+ "Stopped";
+}
+
+function realtimeLoop(){
+
+ if(!analyser)
+   return;
+
+ const buf =
+ new Float32Array(
+   analyser.fftSize
+ );
+
+ analyser
+ .getFloatTimeDomainData(
+    buf
+ );
+
+ realtimeBuffer.push(
+   ...buf
+ );
+
+ const maxSamples =
+ 48000*5;
+
+ if(
+   realtimeBuffer.length >
+   maxSamples
+ ){
+   realtimeBuffer =
+   realtimeBuffer.slice(
+     realtimeBuffer.length -
+     maxSamples
+   );
+ }
+
+ const result =
+ analyzeSamples(
+    Float32Array.from(
+      realtimeBuffer
+    ),
+    48000
+ );
+
+ updateUI(result);
+
+ requestAnimationFrame(
+    realtimeLoop
+ );
 }
 
 function prevView(){
