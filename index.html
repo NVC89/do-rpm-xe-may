@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Máy Đo Vòng Tua Xe Máy (RPM) - Pro</title>
+    <title>Máy Đo Vòng Tua Xe Máy (RPM) - R1</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -103,55 +103,65 @@
     const canvasCtx = canvas.getContext('2d');
 
     startBtn.addEventListener('click', async () => {
-        if (isRecording) {
-            if (audioCtx) audioCtx.close();
-            startBtn.innerText = "BẮT ĐẦU ĐO";
-            startBtn.style.backgroundColor = "#00ffcc";
-            rpmValue.innerText = "0000";
-            freqValue.innerText = "0.0";
-            isRecording = false;
-            return;
+    if (isRecording) {
+        if (audioCtx) audioCtx.close();
+        startBtn.innerText = "BẮT ĐẦU ĐO";
+        startBtn.style.backgroundColor = "#00ffcc";
+        rpmValue.innerText = "0000";
+        freqValue.innerText = "0.0";
+        isRecording = false;
+        return;
+    }
+
+    // 1. Kiểm tra xem trình duyệt có hỗ trợ API không
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Trình duyệt này không hỗ trợ hoặc đang chặn quyền Micro trong môi trường này.");
+        return;
+    }
+
+    try {
+        // 2. Tạo AudioContext NGAY LẬP TỨC sau cú click để báo hiệu cho trình duyệt
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Kích hoạt trạng thái nếu AudioContext bị treo (Resume)
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
         }
 
-        try {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false, // Tắt lọc nhiễu mặc định của máy để giữ tiếng pô thô
-                    autoGainControl: false
-                }, 
-                video: false 
-            });
-            
-            source = audioCtx.createMediaStreamSource(stream);
-            
-            // 1. TẠO BỘ LỌC THÔNG THẤP (LOW-PASS FILTER)
-            // Xe máy số ga-lăng-ti khoảng 12-15Hz, kéo ga mạnh lên tầm 60-80Hz.
-            // Cắt toàn bộ các tần số cao trên 150Hz để triệt tiêu tiếng gió xé, tiếng máy xào.
-            biquadFilter = audioCtx.createBiquadFilter();
-            biquadFilter.type = "lowpass";
-            biquadFilter.frequency.setValueAtTime(150, audioCtx.currentTime); 
-            
-            // 2. THIẾT LẬP PHÂN TÍCH FFT
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 4096; 
-            analyser.smoothingTimeConstant = 0.6; // Làm mượt dao động hiển thị tránh nhảy số liên tục
-            
-            // Kết nối chuỗi dữ liệu: Micro -> Bộ lọc Lowpass -> Bộ phân tích FFT -> Đích
-            source.connect(biquadFilter);
-            biquadFilter.connect(analyser);
-            
-            startBtn.innerText = "ĐANG NHẬN ÂM THANH...";
-            startBtn.style.backgroundColor = "#ff3366";
-            isRecording = true;
-            
-            updateAudioData();
-        } catch (err) {
-            alert("Lỗi kết nối Micro: " + err.message);
-        }
-    });
+        // 3. Yêu cầu cấp quyền Micro
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+            }, 
+            video: false 
+        });
+        
+        // 4. Nếu thành công, kết nối luồng âm thanh
+        source = audioCtx.createMediaStreamSource(stream);
+        
+        biquadFilter = audioCtx.createBiquadFilter();
+        biquadFilter.type = "lowpass";
+        biquadFilter.frequency.setValueAtTime(150, audioCtx.currentTime); 
+        
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 4096; 
+        analyser.smoothingTimeConstant = 0.6;
+        
+        source.connect(biquadFilter);
+        biquadFilter.connect(analyser);
+        
+        startBtn.innerText = "ĐANG ĐO... (BẤM ĐỂ DỪNG)";
+        startBtn.style.backgroundColor = "#ff3366";
+        isRecording = true;
+        
+        updateAudioData();
+    } catch (err) {
+        // In rõ lỗi ra màn hình điện thoại để dễ debug
+        alert("Lỗi Micro: " + err.name + " - " + err.message);
+    }
+});
 
     function updateAudioData() {
         if (!isRecording) return;
