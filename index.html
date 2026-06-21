@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Motorcycle RPM Analyzer V3</title>
+    <title>Motorcycle RPM Analyzer V4</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -231,7 +231,18 @@
     <div class="panel">
         <h2>Motorcycle RPM Analyzer V4</h2>
         <div>
-            <input type="file" id="file" accept="audio/*" style="width: auto;">
+            <input
+                id="file"
+                type="file"
+                accept="
+                audio/*,
+                .m4a,
+                .aac,
+                .mp3,
+                .wav,
+                .ogg,
+                .webm
+                ">
             <button onclick="analyze()">Phân tích File</button>
             <button onclick="prevView()">◀ Prev</button>
             <button onclick="nextView()">Next ▶</button>
@@ -285,6 +296,7 @@
 
     <script>
         let G = {};
+        const MAX_SECONDS = 15;
 
         let micContext = null;
         let analyser = null;
@@ -769,8 +781,10 @@ for(let i=1;i<peaks.length;i++){
                 ...buf
             );
 
-            const maxSamples =
-                48000 * 5;
+            
+            let maxSamples =
+            MAX_SECONDS *
+            audio.sampleRate;
 
             if (
                 realtimeBuffer.length >
@@ -796,6 +810,15 @@ for(let i=1;i<peaks.length;i++){
             requestAnimationFrame(
                 realtimeLoop
             );
+
+            if(
+                performance.now()-lastFFT
+                >1000
+            ){
+                drawFFT();
+                lastFFT=
+                performance.now();
+            }
         }
 
         function prevView() {
