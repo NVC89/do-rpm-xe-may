@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Máy Đo Vòng Tua Xe Máy (RPM) - Ổn Định</title>
+    <title>Máy Đo Vòng Tua Xe Máy (RPM) - Phân Tích File</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -23,7 +23,7 @@
         h1 { color: #00ffcc; font-size: 1.5rem; margin-bottom: 5px; }
         .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 20px; }
         .rpm-display {
-            font-size: 4.5rem;
+            font-size: 5rem;
             font-weight: bold;
             color: #ff3366;
             margin: 15px 0;
@@ -35,58 +35,72 @@
             color: #aaaaaa;
             margin-bottom: 20px;
         }
+        .section {
+            background: #252525;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #333;
+        }
         button {
             background-color: #00ffcc;
             color: #121212;
             border: none;
-            padding: 15px 40px;
-            font-size: 1.2rem;
+            padding: 12px 30px;
+            font-size: 1rem;
             font-weight: bold;
-            border-radius: 30px;
+            border-radius: 25px;
             cursor: pointer;
             transition: 0.3s;
-            box-shadow: 0 4px 10px rgba(0,255,204,0.3);
+            box-shadow: 0 4px 10px rgba(0,255,204,0.2);
+            width: 100%;
+            margin-top: 5px;
         }
         button:hover { background-color: #00cc99; }
-        canvas {
-            width: 100%;
-            height: 140px;
-            background-color: #050505;
-            margin-top: 20px;
-            border-radius: 8px;
-            border: 1px solid #333;
+        input[type="file"] {
+            display: none;
         }
-        .note {
-            font-size: 0.85rem;
-            color: #aaa;
-            margin-top: 20px;
-            text-align: left;
-            line-height: 1.5;
-            background: #252525;
+        .file-label {
+            display: block;
+            background: #333;
+            color: #00ffcc;
+            border: 1px dashed #00ffcc;
             padding: 12px;
             border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .file-label:hover { background: #3c3c3c; }
+        canvas {
+            width: 100%;
+            height: 120px;
+            background-color: #050505;
+            margin-top: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>MÁY ĐO VÒNG TUA RPM</h1>
-    <div class="subtitle">Phiên bản chống nhiễu - Bộ lọc ổn định định số</div>
+    <h1>MÁY ĐO VÒNG TUA RPM R2</h1>
+    <div class="subtitle">Động cơ 4 thì, 1 xi-lanh (Hỗ trợ đọc file ghi âm)</div>
     
     <div class="rpm-display" id="rpmValue">0000</div>
-    <div class="freq-display">Tần số nổ ổn định: <span id="freqValue" style="color: #00ffcc; font-weight:bold;">0.0</span> Hz</div>
+    <div class="freq-display">Tần số đỉnh: <span id="freqValue" style="color: #00ffcc; font-weight:bold;">0.0</span> Hz</div>
     
-    <button id="startBtn">BẮT ĐẦU ĐO</button>
+    <div class="section">
+        <label for="fileInput" class="file-label" id="fileLabel">📁 CHỌN FILE GHI ÂM (.M4A, .MP3, .WAV)</label>
+        <input type="file" id="fileInput" accept="audio/*">
+    </div>
+
+    <div class="section">
+        <button id="startBtn">🎤 ĐO TRỰC TIẾP QUA MICRO</button>
+    </div>
     
     <canvas id="visualizer"></canvas>
-    
-    <div class="note">
-        <strong>Mẹo căn chỉnh thực tế khi số bị nhảy:</strong><br>
-        1. <b>Khoảng cách:</b> Giữ điện thoại cách pô khoảng 30cm. Nếu số nhảy quá cao, hãy đưa máy ra xa thêm một chút.<br>
-        2. <b>Góc đo:</b> Không hứng trực tiếp luồng khí pô thổi vào mic. Hãy đặt máy vuông góc hoặc lệch 45 độ so với hướng luồng khí.<br>
-        3. <b>Môi trường:</b> Tránh đo ở nơi có tiếng quạt gió hoặc tiếng người nói lớn sát cạnh mic.
-    </div>
 </div>
 
 <script>
@@ -94,40 +108,91 @@
     let analyser = null;
     let source = null;
     let isRecording = false;
+    let animationId = null;
     
-    // Khởi tạo mảng lưu lịch sử đo để tính trung bình trượt (Lọc mượt số)
-    let rpmHistory = [];
-    const HISTORY_SIZE = 12; // Lấy trung bình của 12 khung hình liên tiếp
-    let lastValidRpm = 0;
-
     const startBtn = document.getElementById('startBtn');
+    const fileInput = document.getElementById('fileInput');
+    const fileLabel = document.getElementById('fileLabel');
     const rpmValue = document.getElementById('rpmValue');
     const freqValue = document.getElementById('freqValue');
     const canvas = document.getElementById('visualizer');
     const canvasCtx = canvas.getContext('2d');
 
+    // CẤU HÌNH THUẬT TOÁN ĐO RPM
+    const minFreq = 10;  // ~1200 RPM
+    const maxFreq = 95;  // ~11400 RPM
+
+    // XỬ LÝ KHI CHỌN FILE GHI ÂM
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        fileLabel.innerText = "📄 " + file.name;
+        stopDirectRecording(); // Tắt chế độ micro nếu đang bật
+
+        // Khởi tạo Audio Context độc lập cho File
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const fileReader = new FileReader();
+        fileReader.onload = async function() {
+            try {
+                const arrayBuffer = fileReader.result;
+                // Giải mã file âm thanh sang AudioBuffer
+                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                
+                // Thiết lập chuỗi phân tích
+                const bufferSource = audioCtx.createBufferSource();
+                bufferSource.buffer = audioBuffer;
+                
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 4096;
+                
+                let filter = audioCtx.createBiquadFilter();
+                filter.type = "lowpass";
+                filter.frequency.setValueAtTime(150, audioCtx.currentTime);
+
+                bufferSource.connect(filter);
+                filter.connect(analyser);
+                bufferSource.connect(audioCtx.destination); // Phát ra loa để nghe lại
+                
+                bufferSource.start(0);
+                isRecording = true;
+                
+                // Tiến hành quét dữ liệu
+                function analyzeFrame() {
+                    if (!isRecording) return;
+                    updateAudioProcessor();
+                    animationId = requestAnimationFrame(analyzeFrame);
+                }
+                analyzeFrame();
+                
+                bufferSource.onended = () => {
+                    isRecording = false;
+                    cancelAnimationFrame(animationId);
+                };
+                
+            } catch (err) {
+                alert("Không thể phân tích file này. Hãy thử file ghi âm khác! Chi tiết: " + err.message);
+            }
+        };
+        fileReader.readAsArrayBuffer(file);
+    });
+
+    // XỬ LÝ ĐO QUA MICRO TRỰC TIẾP
     startBtn.addEventListener('click', async () => {
         if (isRecording) {
-            if (audioCtx) audioCtx.close();
-            startBtn.innerText = "BẮT ĐẦU ĐO";
-            startBtn.style.backgroundColor = "#00ffcc";
-            rpmValue.innerText = "0000";
-            freqValue.innerText = "0.0";
-            rpmHistory = [];
-            isRecording = false;
+            stopDirectRecording();
             return;
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert("Trình duyệt không hỗ trợ hoặc đang chặn quyền Micro.");
+            alert("Trình duyệt không hỗ trợ truy cập Micro.");
             return;
         }
 
         try {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
             
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, 
@@ -136,35 +201,44 @@
             
             source = audioCtx.createMediaStreamSource(stream);
             
-            // DÙNG BỘ LỌC BẰNG PHẦN CỨNG TRÌNH DUYỆT (BIQUAD FILTER)
-            // Chỉ giữ lại dải âm thanh từ 10Hz đến 120Hz (Dải tiếng nổ pô xe máy)
             let filter = audioCtx.createBiquadFilter();
-            filter.type = "bandpass";
-            filter.frequency.value = 45; // Tâm dải tần lọc (quanh dải ga xe máy)
-            filter.Q.value = 0.8; // Độ rộng của bộ lọc thông dải
+            filter.type = "lowpass";
+            filter.frequency.setValueAtTime(150, audioCtx.currentTime);
             
             analyser = audioCtx.createAnalyser();
             analyser.fftSize = 4096; 
-            analyser.smoothingTimeConstant = 0.85; // Tăng độ mượt của dữ liệu FFT gốc
+            analyser.smoothingTimeConstant = 0.7;
             
             source.connect(filter);
             filter.connect(analyser);
             
-            startBtn.innerText = "ĐANG ĐO... (BẤM ĐỂ DỪNG)";
+            startBtn.innerText = "🛑 DỪNG ĐO MICRO";
             startBtn.style.backgroundColor = "#ff3366";
             isRecording = true;
             
-            updateAudioData();
+            function loop() {
+                if (!isRecording) return;
+                updateAudioProcessor();
+                animationId = requestAnimationFrame(loop);
+            }
+            loop();
         } catch (err) {
             alert("Lỗi Micro: " + err.message);
         }
     });
 
-    function updateAudioData() {
-        if (!isRecording) return;
-        
-        requestAnimationFrame(updateAudioData);
-        
+    function stopDirectRecording() {
+        isRecording = false;
+        if (audioCtx) audioCtx.close().then(() => { audioCtx = null; });
+        cancelAnimationFrame(animationId);
+        startBtn.innerText = "🎤 ĐO TRỰC TIẾP QUA MICRO";
+        startBtn.style.backgroundColor = "#00ffcc";
+        rpmValue.innerText = "0000";
+        freqValue.innerText = "0.0";
+    }
+
+    // THUẬT TOÁN TÍNH TOÁN CORE
+    function updateAudioProcessor() {
         const fftSize = analyser.fftSize;
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
@@ -173,66 +247,28 @@
         drawVisualizer(dataArray, bufferLength);
         
         const sampleRate = audioCtx.sampleRate;
-        const minFreq = 10;  // Tương đương ~1200 RPM (Ga-lăng-ti thấp nhất)
-        const maxFreq = 95;  // Tương đương ~11400 RPM (Kéo ga cực mạnh)
-        
         let maxVal = -1;
         let maxIndex = -1;
         
         for (let i = 0; i < bufferLength; i++) {
             let freq = (i * sampleRate) / fftSize;
             if (freq >= minFreq && freq <= maxFreq) {
-                // Thêm trọng số cho tần số thấp để ưu tiên tiếng nổ lụp bụp thay vì tiếng máy rít 
-                let weight = 1.0;
-                if (freq < 25) weight = 1.3; 
-                
-                let currentVal = dataArray[i] * weight;
-                if (currentVal > maxVal) {
-                    maxVal = currentVal;
+                if (dataArray[i] > maxVal) {
+                    maxVal = dataArray[i];
                     maxIndex = i;
                 }
             }
         }
         
-        // Ngưỡng lọc tạp âm nền (Nếu pô không đủ gần hoặc âm thanh quá bé thì bỏ qua)
-        if (maxIndex !== -1 && dataArray[maxIndex] > 60) { 
+        if (maxIndex !== -1 && maxVal > 50) { 
             let peakFreq = (maxIndex * sampleRate) / fftSize;
-            let currentRpm = Math.round(peakFreq * 120);
+            let rpm = Math.round(peakFreq * 120);
             
-            // THUẬT TOÁN LỌC SỐ ẢO (DEBOUNCE / HYSTERESIS)
-            if (lastValidRpm > 0 && Math.abs(currentRpm - lastValidRpm) > 3500) {
-                // Nếu số mới lệch đột ngột quá 3500 vòng so với lần đo trước -> Coi là nhiễu rác và bỏ qua
-                return; 
-            }
+            // Làm mịn giao diện bằng cách làm tròn về hàng chục
+            rpm = Math.round(rpm / 10) * 10;
             
-            lastValidRpm = currentRpm;
-            
-            // THUẬT TOÁN TRUNG BÌNH TRƯỢT (MOVING AVERAGE)
-            rpmHistory.push(currentRpm);
-            if (rpmHistory.length > HISTORY_SIZE) {
-                rpmHistory.shift(); // Xóa bớt phần tử cũ nhất
-            }
-            
-            // Tính số RPM trung bình
-            let sum = rpmHistory.reduce((a, b) => a + b, 0);
-            let smoothRpm = Math.round(sum / rpmHistory.length);
-            
-            // Làm tròn số về hàng chục để giao diện nhìn đỡ rối mắt (Ví dụ: 1423 -> 1420)
-            smoothRpm = Math.round(smoothRpm / 10) * 10;
-            
-            freqValue.innerText = (smoothRpm / 120).toFixed(1);
-            rpmValue.innerText = smoothRpm;
-        } else {
-            // Giảm từ từ về 0 nếu không nghe thấy tiếng pô nữa
-            if (rpmHistory.length > 0) {
-                rpmHistory.shift();
-                let sum = rpmHistory.reduce((a, b) => a + b, 0);
-                let smoothRpm = rpmHistory.length > 0 ? Math.round(sum / rpmHistory.length) : 0;
-                smoothRpm = Math.round(smoothRpm / 10) * 10;
-                rpmValue.innerText = smoothRpm > 0 ? smoothRpm : "----";
-            } else {
-                rpmValue.innerText = "----";
-            }
+            freqValue.innerText = peakFreq.toFixed(1);
+            rpmValue.innerText = rpm;
         }
     }
 
@@ -247,11 +283,7 @@
         let x = 0;
         for(let i = 0; i < maxVisibleBin; i++) {
             let barHeight = (dataArray[i] / 255) * canvas.height;
-            if (dataArray[i] > 60) {
-                canvasCtx.fillStyle = '#ff3366';
-            } else {
-                canvasCtx.fillStyle = '#00ffcc';
-            }
+            canvasCtx.fillStyle = dataArray[i] > 60 ? '#ff3366' : '#00ffcc';
             canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
             x += barWidth;
         }
