@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Máy Đo Vòng Tua Xe Máy (RPM) - Pro</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        h1 { color: #00ffcc; font-size: 1.5rem; margin-bottom: 5px; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 20px; }
+        .rpm-display {
+            font-size: 4.5rem;
+            font-weight: bold;
+            color: #ff3366;
+            margin: 15px 0;
+            text-shadow: 0 0 15px rgba(255,51,102,0.6);
+            font-family: monospace;
+        }
+        .freq-display {
+            font-size: 1.1rem;
+            color: #aaaaaa;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #00ffcc;
+            color: #121212;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: 0.3s;
+            box-shadow: 0 4px 10px rgba(0,255,204,0.3);
+        }
+        button:hover { background-color: #00cc99; }
+        canvas {
+            width: 100%;
+            height: 140px;
+            background-color: #050505;
+            margin-top: 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .note {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-top: 20px;
+            text-align: left;
+            line-height: 1.5;
+            background: #252525;
+            padding: 12px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>MÁY ĐO VÒNG TUA RPM</h1>
+    <div class="subtitle">Động cơ 4 thì, 1 xi-lanh (Cải tiến lọc nhiễu)</div>
+    
+    <div class="rpm-display" id="rpmValue">0000</div>
+    <div class="freq-display">Tần số nổ: <span id="freqValue" style="color: #00ffcc; font-weight:bold;">0.0</span> Hz</div>
+    
+    <button id="startBtn">BẮT ĐẦU ĐO</button>
+    
+    <canvas id="visualizer"></canvas>
+    
+    <div class="note">
+        <strong>Mẹo đo chính xác trên điện thoại:</strong><br>
+        1. Đặt micro điện thoại cách pô xe khoảng <b>20 - 30 cm</b>.<br>
+        2. <b>Nên né hướng luồng hơi pô thổi thẳng vào lỗ micro</b> (hơi pô thổi mạnh tạo ra tiếng ù gió làm lệch tần số). Đặt máy lệch góc một chút.<br>
+        3. Nhìn biểu đồ cột: Nếu có 1 cột đỏ nhảy cao vượt trội nghĩa là app đã bắt trúng tiếng máy.
+    </div>
+</div>
+
+<script>
+    let audioCtx = null;
+    let analyser = null;
+    let biquadFilter = null;
+    let source = null;
+    let isRecording = false;
+    
+    const startBtn = document.getElementById('startBtn');
+    const rpmValue = document.getElementById('rpmValue');
+    const freqValue = document.getElementById('freqValue');
+    const canvas = document.getElementById('visualizer');
+    const canvasCtx = canvas.getContext('2d');
+
+    startBtn.addEventListener('click', async () => {
+        if (isRecording) {
+            if (audioCtx) audioCtx.close();
+            startBtn.innerText = "BẮT ĐẦU ĐO";
+            startBtn.style.backgroundColor = "#00ffcc";
+            rpmValue.innerText = "0000";
+            freqValue.innerText = "0.0";
+            isRecording = false;
+            return;
+        }
+
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false, // Tắt lọc nhiễu mặc định của máy để giữ tiếng pô thô
+                    autoGainControl: false
+                }, 
+                video: false 
+            });
+            
+            source = audioCtx.createMediaStreamSource(stream);
+            
+            // 1. TẠO BỘ LỌC THÔNG THẤP (LOW-PASS FILTER)
+            // Xe máy số ga-lăng-ti khoảng 12-15Hz, kéo ga mạnh lên tầm 60-80Hz.
+            // Cắt toàn bộ các tần số cao trên 150Hz để triệt tiêu tiếng gió xé, tiếng máy xào.
+            biquadFilter = audioCtx.createBiquadFilter();
+            biquadFilter.type = "lowpass";
+            biquadFilter.frequency.setValueAtTime(150, audioCtx.currentTime); 
+            
+            // 2. THIẾT LẬP PHÂN TÍCH FFT
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 4096; 
+            analyser.smoothingTimeConstant = 0.6; // Làm mượt dao động hiển thị tránh nhảy số liên tục
+            
+            // Kết nối chuỗi dữ liệu: Micro -> Bộ lọc Lowpass -> Bộ phân tích FFT -> Đích
+            source.connect(biquadFilter);
+            biquadFilter.connect(analyser);
+            
+            startBtn.innerText = "ĐANG NHẬN ÂM THANH...";
+            startBtn.style.backgroundColor = "#ff3366";
+            isRecording = true;
+            
+            updateAudioData();
+        } catch (err) {
+            alert("Lỗi kết nối Micro: " + err.message);
+        }
+    });
+
+    function updateAudioData() {
+        if (!isRecording) return;
+        
+        requestAnimationFrame(updateAudioData);
+        
+        const fftSize = analyser.fftSize;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyser.getByteFrequencyData(dataArray);
+        
+        // Vẽ biểu đồ
+        drawVisualizer(dataArray, bufferLength);
+        
+        const sampleRate = audioCtx.sampleRate;
+        
+        // Dải quét tiếng nổ: Từ 10Hz (1200 RPM) đến 90Hz (10800 RPM)
+        const minFreq = 10;
+        const maxFreq = 90;
+        
+        let maxVal = -1;
+        let maxIndex = -1;
+        
+        for (let i = 0; i < bufferLength; i++) {
+            // SỬA ĐÚNG CÔNG THỨC ĐỘ PHÂN GIẢI TẦN SỐ CỦA MỖI BIN (Cột)
+            let freq = (i * sampleRate) / fftSize;
+            
+            if (freq >= minFreq && freq <= maxFreq) {
+                if (dataArray[i] > maxVal) {
+                    maxVal = dataArray[i];
+                    maxIndex = i;
+                }
+            }
+        }
+        
+        // Ngưỡng lọc nhiễu: Đỉnh âm thanh phải đủ lớn (> 65) thì mới ghi nhận, tránh nhận tiếng động rác
+        if (maxIndex !== -1 && maxVal > 65) { 
+            let peakFreq = (maxIndex * sampleRate) / fftSize;
+            
+            // Xe 4 thì, 1 máy: RPM = Hz * 120
+            let rpm = Math.round(peakFreq * 120);
+            
+            freqValue.innerText = peakFreq.toFixed(1);
+            rpmValue.innerText = rpm;
+        } else {
+            rpmValue.innerText = "----";
+        }
+    }
+
+    function drawVisualizer(dataArray, bufferLength) {
+        canvasCtx.fillStyle = '#050505';
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Đoạn này tập trung vẽ dải tần số thấp từ 0Hz đến 200Hz cho trực quan
+        const sampleRate = audioCtx.sampleRate;
+        const maxVisibleBin = Math.floor((200 * analyser.fftSize) / sampleRate);
+        const barWidth = canvas.width / maxVisibleBin;
+        
+        let x = 0;
+        for(let i = 0; i < maxVisibleBin; i++) {
+            let barHeight = (dataArray[i] / 255) * canvas.height;
+            
+            // Tô màu đỏ cho các cột có cường độ mạnh
+            if (dataArray[i] > 65) {
+                canvasCtx.fillStyle = '#ff3366';
+            } else {
+                canvasCtx.fillStyle = '#00ffcc';
+            }
+            
+            canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+            x += barWidth;
+        }
+    }
+</script>
+</body>
+</html>
