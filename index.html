@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Motorcycle RPM Analyzer V4</title>
+    <title>Motorcycle RPM Analyzer V3</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -301,6 +301,7 @@
         let micContext = null;
         let analyser = null;
         let micStream = null;
+        let lastFFT = 0;
 
         let realtimeBuffer = [];
 
@@ -504,7 +505,7 @@ for(let i=1;i<peaks.length;i++){
 
             G = {
                 ...result,
-                start: 0
+                start: G.start || 0
             };
 
             renderStats({
@@ -516,7 +517,7 @@ for(let i=1;i<peaks.length;i++){
                         ? 1000 / result.peakFreq
                         : 0,
                 peakFreq: result.peakFreq,
-                fftFreq: 0,
+                fftFreq: result.fftFreq,
                 rpm120: result.rpm120,
                 rpm240: result.rpm240
             });
@@ -623,16 +624,6 @@ for(let i=1;i<peaks.length;i++){
  <div><b>RPM x120</b><br>${s.rpm120.toFixed(0)}</div>
  <div><b>RPM x240</b><br>${s.rpm240.toFixed(0)}</div>
  `;
-        }
-
-        function buildTable(periods, rpms) {
-            peakTable.innerHTML = "<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>";
-            G.peaks.forEach((p, i) => {
-                let t = (p * G.envelopeWindow / G.sr).toFixed(3);
-                let per = i ? (periods[i - 1] * 1000).toFixed(1) : "";
-                let rpm = i ? rpms[i - 1].toFixed(0) : "";
-                peakTable.innerHTML += `<tr><td>${i + 1}</td><td>${t}</td><td>${per}</td><td>${rpm}</td></tr>`;
-            });
         }
 
         function drawEnvelope() {
@@ -764,60 +755,29 @@ for(let i=1;i<peaks.length;i++){
 
         function realtimeLoop() {
 
-            if (!analyser)
-                return;
+            if (!analyser) return;
 
-            const buf =
-                new Float32Array(
-                    analyser.fftSize
-                );
+            const buf = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(buf);
+            realtimeBuffer.push(...buf);
 
-            analyser
-                .getFloatTimeDomainData(
-                    buf
-                );
-
-            realtimeBuffer.push(
-                ...buf
-            );
-
-            
-            let maxSamples =
-            MAX_SECONDS *
-            audio.sampleRate;
-
-            if (
-                realtimeBuffer.length >
-                maxSamples
-            ) {
-                realtimeBuffer =
-                    realtimeBuffer.slice(
-                        realtimeBuffer.length -
-                        maxSamples
-                    );
+            let maxSamples = MAX_SECONDS * micContext.sampleRate;
+            if (realtimeBuffer.length > maxSamples) {
+                realtimeBuffer = realtimeBuffer.slice(realtimeBuffer.length - maxSamples);
             }
 
-            const result =
-                analyzeSamples(
-                    Float32Array.from(
-                        realtimeBuffer
-                    ),
-                    48000
-                );
+            const now = performance.now();
+            if(now - lastUpdate > 500){
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer), micContext.sampleRate);
+                updateUI(result);
+                lastUpdate = now;
+            }
 
-            updateUI(result);
+            requestAnimationFrame(realtimeLoop);
 
-            requestAnimationFrame(
-                realtimeLoop
-            );
-
-            if(
-                performance.now()-lastFFT
-                >1000
-            ){
+            if(now - lastFFT > 500) {
                 drawFFT();
-                lastFFT=
-                performance.now();
+                lastFFT = performance.now();
             }
         }
 
@@ -825,6 +785,7 @@ for(let i=1;i<peaks.length;i++){
             G.start = Math.max(0, (G.start || 0) - (+viewSec.value));
             drawEnvelope();
         }
+        
         function nextView() {
             G.start = Math.min(Math.max(0, G.duration - (+viewSec.value)), (G.start || 0) + (+viewSec.value));
             drawEnvelope();
