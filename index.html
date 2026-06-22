@@ -247,6 +247,16 @@
             margin-top: 2px;
         }
 
+        .debug-info {
+            font-size: 11px;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-family: monospace;
+        }
+
         /* Tối ưu hóa riêng cho màn hình Mobile (< 600px) */
         @media (max-width: 600px) {
             body {
@@ -281,7 +291,7 @@
 
 <body>
     <div class="panel">
-        <h2>🔧 RPM Analyzer V4 - Auto Calibration</h2>
+        <h2>🔧 RPM Analyzer V5 - Optimized</h2>
         <div>
             <input
                 id="file"
@@ -341,6 +351,8 @@
         </div>
         <br>
         <button onclick="resetParameters()" class="secondary">↻ Reset Parameters</button>
+        
+        <div class="debug-info" id="debugInfo"></div>
     </div>
 
     <div class="panel">
@@ -371,7 +383,7 @@
 
     <script>
         let G = {};
-        const MAX_SECONDS = 15;
+        const BUFFER_DURATION = 3; // Chỉ giữ 3 giây dữ liệu mới nhất
         const CALIBRATION_DURATION = 3; // 3 seconds to calibrate
 
         let micContext = null;
@@ -383,6 +395,7 @@
         let calibrationTime = 0;
 
         let realtimeBuffer = [];
+        let bufferStartTime = 0;
 
         // Default parameters
         const DEFAULT_PARAMS = {
@@ -391,6 +404,14 @@
             thr: 0.75,
             peakMs: 70,
             viewSec: 1
+        };
+
+        // Debug info
+        let debugInfo = {
+            bufferSize: 0,
+            lastChunkSize: 0,
+            analysisTime: 0,
+            totalSamples: 0
         };
 
         function median(a) {
@@ -422,6 +443,8 @@
         }
 
         function analyzeSamples(raw, sr) { 
+            const startAnalysis = performance.now();
+            
             const envelopeWindow = Number(document.getElementById("envWin").value); 
             const smoothN = Number(document.getElementById("smooth").value); 
             const thresholdFactor = Number(document.getElementById("thr").value); 
@@ -521,6 +544,8 @@
             const envRate = sr / envelopeWindow; 
             const fftFreq = maxI * envRate / Math.min( 2048, sm.length );
 
+            debugInfo.analysisTime = performance.now() - startAnalysis;
+
             return {
                 sm,
                 peaks,
@@ -592,6 +617,19 @@
             statusDiv.innerHTML = `<div class="calibration-status ${type}">${message}</div>`;
         }
 
+        function updateDebugInfo() {
+            debugInfo.bufferSize = realtimeBuffer.length;
+            debugInfo.totalSamples = Math.round(realtimeBuffer.length / (micContext?.sampleRate || 44100));
+            
+            const debugDiv = document.getElementById('debugInfo');
+            debugDiv.innerHTML = `
+                Buffer: ${(debugInfo.bufferSize / 1024).toFixed(1)}KB (${debugInfo.totalSamples}s) | 
+                Last chunk: ${(debugInfo.lastChunkSize / 1024).toFixed(1)}KB | 
+                Analysis: ${debugInfo.analysisTime.toFixed(1)}ms | 
+                Update: 500ms
+            `;
+        }
+
         function updateUI(result) {
 
             G = {
@@ -625,6 +663,8 @@
 
             document.getElementById("liveRPM").innerHTML =
                 `RPM x120: ${result.rpm120.toFixed(0)} | Peak: ${result.peakFreq.toFixed(2)} Hz | Stddev: ${result.rpmStddev.toFixed(0)}`;
+            
+            updateDebugInfo();
         }
 
         async function analyze() {
@@ -841,6 +881,7 @@
                 lp.connect(analyser);
 
                 realtimeBuffer = [];
+                bufferStartTime = performance.now();
                 isCalibrating = true;
                 calibrationTime = 0;
 
@@ -881,8 +922,10 @@
             const buf = new Float32Array(analyser.fftSize);
             analyser.getFloatTimeDomainData(buf);
             realtimeBuffer.push(...buf);
+            debugInfo.lastChunkSize = buf.length * 4; // 4 bytes per float32
 
-            let maxSamples = MAX_SECONDS * micContext.sampleRate;
+            // Giữ chỉ 3 giây dữ liệu mới nhất (tối ưu bộ nhớ)
+            let maxSamples = BUFFER_DURATION * micContext.sampleRate;
             if (realtimeBuffer.length > maxSamples) {
                 realtimeBuffer = realtimeBuffer.slice(realtimeBuffer.length - maxSamples);
             }
