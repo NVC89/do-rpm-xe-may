@@ -502,14 +502,22 @@
         // Tính RMS của signal
         function calculateRMS(signal) {
             if (!signal.length) return 0;
-            const sum = signal.reduce((acc, val) => acc + val * val, 0);
+            let sum = 0;
+            for (let i = 0; i < signal.length; i++) {
+                sum += signal[i] * signal[i];
+            }
             return Math.sqrt(sum / signal.length);
         }
 
         // Tính Peak của signal
         function calculatePeak(signal) {
             if (!signal.length) return 0;
-            return Math.max(...signal.map(x => Math.abs(x)));
+            let max = 0;
+            for (let i = 0; i < signal.length; i++) {
+                const abs = signal[i] < 0 ? -signal[i] : signal[i];
+                if (abs > max) max = abs;
+            }
+            return max;
         }
 
         // Normalize signal theo RMS hoặc Peak
