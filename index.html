@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>RPM Analyzer V6 - Advanced Noise Reduction</title>
+    <title>RPM Analyzer V7 - Balanced Filters</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -101,6 +101,14 @@
             background-color: #059669;
         }
 
+        button.warning {
+            background-color: #f59e0b;
+        }
+
+        button.warning:hover {
+            background-color: #d97706;
+        }
+
         input[type="number"],
         input[type="range"],
         select {
@@ -178,6 +186,16 @@
             color: #0c4a6e;
         }
 
+        .warning-status {
+            background: #fef08a;
+            border: 1px solid #fde047;
+            color: #713f12;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
         .waveform-container {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -197,7 +215,7 @@
             display: block;
             width: 100% !important;
             height: auto !important;
-            max-height: 320px;
+            max-height: 280px;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
             background: #fff;
@@ -278,11 +296,29 @@
             font-size: 12px;
             color: #1e40af;
             margin-top: 8px;
+            line-height: 1.4;
         }
 
         .info-box b {
             display: block;
             margin-bottom: 4px;
+        }
+
+        .toggle-advanced {
+            font-size: 12px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+
+        .advanced-section {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .advanced-section.show {
+            display: block;
         }
 
         @media (max-width: 600px) {
@@ -317,7 +353,7 @@
 
 <body>
     <div class="panel">
-        <h2>🎙️ RPM Analyzer V6 - Noise Reduction</h2>
+        <h2>🎙️ RPM Analyzer V7 - Balanced Input</h2>
         <div>
             <input id="file" type="file" accept="audio/*,.m4a,.aac,.mp3,.wav,.ogg,.webm">
             <button onclick="analyze()">Phân tích File</button>
@@ -333,72 +369,70 @@
             <span id="liveRPM"></span>
         </div>
 
+        <div id="signalWarning"></div>
         <div id="calibrationStatus"></div>
 
         <hr>
-        <div class="section-title">🎚️ Cài đặt Microphone (Bộ lọc)</div>
+        <div class="section-title">🎚️ Cài đặt Microphone (Đơn Giản)</div>
         <div class="row">
             <label>
-                HPF (High Pass Filter) 🔊
-                <input id="hpfFreq" type="range" min="5" max="100" step="5" value="20">
+                Input Gain 🔊
+                <input id="inputGain" type="range" min="50" max="300" step="10" value="100">
+                <span class="param-display" id="inputGainDisplay">100%</span>
+                <div class="info-box">
+                    <b>📝 Điều chỉnh độ nhạy mic:</b> Tăng nếu tín hiệu quá yếu. Hạ nếu bị cắt xén.
+                </div>
+            </label>
+            <label>
+                Noise Floor 🚫
+                <input id="noiseFloor" type="range" min="0.001" max="0.05" step="0.001" value="0.01">
+                <span class="param-display" id="noiseFloorDisplay">0.01</span>
+                <div class="info-box">
+                    <b>📝 Loại bỏ tiếng yếu:</b> Tín hiệu dưới ngưỡng này sẽ bị bỏ. Tăng nếu quá nhiều nhiễu nền.
+                </div>
+            </label>
+            <label>
+                High Pass Filter 🔉
+                <input id="hpfFreq" type="range" min="0" max="100" step="5" value="20">
                 <span class="param-display" id="hpfDisplay">20 Hz</span>
                 <div class="info-box">
-                    <b>📝 Loại bỏ tiếng thấp:</b> Cắt những tần số dưới ngưỡng. Tăng lên nếu còn rầm rầm.
-                </div>
-            </label>
-            <label>
-                LPF (Low Pass Filter) 🔉
-                <input id="lpfFreq" type="range" min="100" max="500" step="50" value="250">
-                <span class="param-display" id="lpfDisplay">250 Hz</span>
-                <div class="info-box">
-                    <b>📝 Loại bỏ tiếng cao:</b> Cắt những tần số trên ngưỡng. Hạ xuống nếu còn nhiễu cao.
-                </div>
-            </label>
-            <label>
-                Noise Gate 🚫
-                <input id="noiseGate" type="range" min="0" max="0.1" step="0.01" value="0.02">
-                <span class="param-display" id="noiseGateDisplay">0.02</span>
-                <div class="info-box">
-                    <b>📝 Ngưỡng im lặng:</b> Bỏ tín hiệu nhỏ hơn. Tăng nếu quá nhiều nhiễu nền.
-                </div>
-            </label>
-            <label>
-                Compressor Ratio 🎚️
-                <input id="compRatio" type="range" min="1" max="10" step="0.5" value="4">
-                <span class="param-display" id="compRatioDisplay">4:1</span>
-                <div class="info-box">
-                    <b>📝 Nén tín hiệu mạnh:</b> 4:1 = mỗi 4dB đầu vào thành 1dB. Làm tín hiệu đều hơn.
+                    <b>📝 Loại bỏ tiếng rầm rầm:</b> Tăng nếu còn rầm. Để 0 nếu không cần.
                 </div>
             </label>
         </div>
 
-        <hr>
-        <div class="section-title">🔊 Điều chỉnh cường độ tín hiệu</div>
-        <div class="row">
-            <label>
-                Volume Input (%)
-                <input id="volumeInput" type="range" min="0" max="200" step="5" value="100">
-                <span class="param-display" id="volumeDisplay">100%</span>
-            </label>
-            <label>
-                Min Amplitude
-                <input id="minAmplitude" type="range" min="0" max="0.5" step="0.01" value="0.05">
-                <span class="param-display" id="minAmpDisplay">0.05</span>
-            </label>
-            <label>
-                Max Amplitude
-                <input id="maxAmplitude" type="range" min="0.1" max="1.0" step="0.05" value="0.8">
-                <span class="param-display" id="maxAmpDisplay">0.8</span>
-            </label>
-            <label>
-                Normalize
-                <select id="normalizeMode">
-                    <option value="off">Off</option>
-                    <option value="peak">Peak</option>
-                    <option value="rms" selected>RMS ⭐</option>
-                </select>
-                <span class="param-display" id="normalizeDisplay"></span>
-            </label>
+        <div>
+            <button onclick="toggleAdvanced()" class="secondary toggle-advanced">⚙️ Cài đặt nâng cao</button>
+        </div>
+
+        <div id="advancedSection" class="advanced-section">
+            <div class="section-title">⚙️ Cài Đặt Nâng Cao (Tùy Chỉnh)</div>
+            <div class="row">
+                <label>
+                    Low Pass Filter 🔊
+                    <input id="lpfFreq" type="range" min="100" max="500" step="50" value="0">
+                    <span class="param-display" id="lpfDisplay">Tắt (0 Hz)</span>
+                    <div class="info-box">
+                        <b>📝 Loại bỏ tiếng cao:</b> Để 0 để tắt. Bật nếu còn nhiễu cao tần.
+                    </div>
+                </label>
+                <label>
+                    Compressor Ratio 📊
+                    <input id="compRatio" type="range" min="1" max="10" step="0.5" value="1">
+                    <span class="param-display" id="compRatioDisplay">1:1 (Tắt)</span>
+                    <div class="info-box">
+                        <b>📝 Nén tín hiệu:</b> 1:1 = tắt. Tăng nếu muốn làm tín hiệu đều hơn.
+                    </div>
+                </label>
+                <label>
+                    Normalize Mode 🎯
+                    <select id="normalizeMode">
+                        <option value="off">Off (Khuyến nghị 👈)</option>
+                        <option value="peak">Peak</option>
+                        <option value="rms">RMS</option>
+                    </select>
+                </label>
+            </div>
         </div>
 
         <hr>
@@ -427,9 +461,10 @@
             </label>
         </div>
         <br>
-        <button onclick="resetParameters()" class="secondary">↻ Reset Parameters</button>
-        <button onclick="loadPreset('quiet')" class="secondary">📍 Chế độ Yên Tĩnh</button>
-        <button onclick="loadPreset('noisy')" class="secondary">📍 Chế độ Ồn Ào</button>
+        <button onclick="resetParameters()" class="secondary">↻ Reset</button>
+        <button onclick="loadPreset('safe')" class="warning">📍 An Toàn (Mặc Định)</button>
+        <button onclick="loadPreset('quiet')" class="secondary">📍 Yên Tĩnh</button>
+        <button onclick="loadPreset('noisy')" class="secondary">📍 Ồn Ào</button>
         
         <div class="debug-info" id="debugInfo"></div>
     </div>
@@ -440,23 +475,23 @@
 
     <div class="panel">
         <div class="waveform-container">
-            <div class="waveform-label">📻 Raw Waveform (Input)</div>
+            <div class="waveform-label">📻 Raw Input Signal</div>
             <canvas id="rawCanvas" width="1400" height="180"></canvas>
         </div>
         <div class="waveform-container">
-            <div class="waveform-label">🔧 Filtered Waveform (After HPF+LPF)</div>
-            <canvas id="filteredCanvas" width="1400" height="180"></canvas>
+            <div class="waveform-label">🔧 After Processing</div>
+            <canvas id="processedCanvas" width="1400" height="180"></canvas>
         </div>
     </div>
 
     <div class="panel">
         <h3>📈 Envelope + Peaks</h3>
-        <canvas id="envCanvas" width="1400" height="320"></canvas>
+        <canvas id="envCanvas" width="1400" height="280"></canvas>
     </div>
 
     <div class="panel">
         <h3>📊 FFT Envelope</h3>
-        <canvas id="fftCanvas" width="1400" height="260"></canvas>
+        <canvas id="fftCanvas" width="1400" height="240"></canvas>
     </div>
 
     <div class="panel">
@@ -487,14 +522,12 @@
         let realtimeBuffer = [];
 
         const DEFAULT_PARAMS = {
+            inputGain: 100,
+            noiseFloor: 0.01,
             hpfFreq: 20,
-            lpfFreq: 250,
-            noiseGate: 0.02,
-            compRatio: 4,
-            volumeInput: 100,
-            minAmplitude: 0.05,
-            maxAmplitude: 0.8,
-            normalizeMode: 'rms',
+            lpfFreq: 0,
+            compRatio: 1,
+            normalizeMode: 'off',
             envWin: 32,
             smooth: 15,
             thr: 0.75,
@@ -503,32 +536,42 @@
         };
 
         const PRESETS = {
+            safe: {
+                inputGain: 100,
+                noiseFloor: 0.01,
+                hpfFreq: 20,
+                lpfFreq: 0,
+                compRatio: 1,
+                normalizeMode: 'off',
+                thr: 0.75
+            },
             quiet: {
+                inputGain: 150,
+                noiseFloor: 0.015,
                 hpfFreq: 30,
                 lpfFreq: 300,
-                noiseGate: 0.05,
                 compRatio: 2,
-                volumeInput: 120,
-                normalizeMode: 'rms',
+                normalizeMode: 'off',
                 thr: 0.8
             },
             noisy: {
+                inputGain: 80,
+                noiseFloor: 0.02,
                 hpfFreq: 50,
-                lpfFreq: 200,
-                noiseGate: 0.08,
-                compRatio: 6,
-                volumeInput: 80,
-                normalizeMode: 'rms',
-                thr: 0.6
+                lpfFreq: 250,
+                compRatio: 3,
+                normalizeMode: 'off',
+                thr: 0.65
             }
         };
 
         let debugInfo = {
-            bufferSize: 0,
-            peakLevel: 0,
+            inputPeak: 0,
+            outputPeak: 0,
             rmsLevel: 0,
             gainApplied: 1,
-            analysisTime: 0
+            analysisTime: 0,
+            peakClipping: false
         };
 
         function median(a) {
@@ -563,111 +606,95 @@
             return max;
         }
 
-        // Simple HPF + LPF (Butterworth-style approximation)
-        function applyFilters(signal, hpfFreq, lpfFreq, sampleRate) {
-            // HPF: Loại bỏ DC và tần số thấp
-            let hpfed = [];
+        // Simple 1st order HPF
+        function applyHPF(signal, hpfFreq, sampleRate) {
+            if (hpfFreq <= 0) return signal;
+            
+            const rc = 1 / (2 * Math.PI * hpfFreq);
+            const dt = 1 / sampleRate;
+            const alpha = rc / (rc + dt);
+            
+            let filtered = [];
             let prev = 0;
-            const hpfAlpha = 2 * Math.PI * hpfFreq / sampleRate / (1 + 2 * Math.PI * hpfFreq / sampleRate);
             
             for (let i = 0; i < signal.length; i++) {
-                let out = hpfAlpha * (prev + signal[i] - (i > 0 ? signal[i-1] : 0));
-                hpfed.push(out);
+                const out = alpha * (prev + signal[i] - (i > 0 ? signal[i-1] : 0));
+                filtered.push(out);
                 prev = out;
             }
-
-            // LPF: Loại bỏ tần số cao (nhiễu)
-            let lpfed = [];
-            const lpfAlpha = 2 * Math.PI * lpfFreq / sampleRate / (1 + 2 * Math.PI * lpfFreq / sampleRate);
-            prev = hpfed[0];
             
-            for (let i = 0; i < hpfed.length; i++) {
-                prev = lpfAlpha * hpfed[i] + (1 - lpfAlpha) * prev;
-                lpfed.push(prev);
+            return filtered;
+        }
+
+        // Simple 1st order LPF
+        function applyLPF(signal, lpfFreq, sampleRate) {
+            if (lpfFreq <= 0) return signal;
+            
+            const rc = 1 / (2 * Math.PI * lpfFreq);
+            const dt = 1 / sampleRate;
+            const alpha = dt / (rc + dt);
+            
+            let filtered = [];
+            let prev = signal[0] || 0;
+            
+            for (let i = 0; i < signal.length; i++) {
+                prev = alpha * signal[i] + (1 - alpha) * prev;
+                filtered.push(prev);
             }
-
-            return lpfed;
+            
+            return filtered;
         }
 
-        // Noise Gate: Loại bỏ tín hiệu dưới ngưỡng
-        function applyNoiseGate(signal, threshold) {
-            return signal.map(x => Math.abs(x) < threshold ? 0 : x);
-        }
-
-        // Compressor: Nén tín hiệu mạnh
         function applyCompressor(signal, ratio) {
+            if (ratio <= 1) return signal;
+            
             const peak = calculatePeak(signal);
             if (peak === 0) return signal;
             
+            const threshold = 0.5;
+            
             return signal.map(x => {
                 const level = Math.abs(x) / peak;
-                if (level > 0.5) {
-                    // Nén phần lớn hơn 0.5
-                    const compressed = 0.5 + (level - 0.5) / ratio;
-                    return (x / Math.abs(x)) * compressed * peak;
+                if (level > threshold) {
+                    const compressed = threshold + (level - threshold) / ratio;
+                    const sign = x < 0 ? -1 : 1;
+                    return sign * compressed * peak;
                 }
                 return x;
             });
         }
 
-        function normalizeSignal(signal, mode, targetMin, targetMax) {
-            if (mode === 'off' || !signal.length) return signal;
-
-            let reference = 0;
-            if (mode === 'rms') {
-                reference = calculateRMS(signal);
-            } else if (mode === 'peak') {
-                reference = calculatePeak(signal);
-            }
-
-            if (reference === 0) return signal;
-
-            const targetRange = targetMax - targetMin;
-            const desiredPeak = targetMin + targetRange / 2;
-            const gain = desiredPeak / reference;
-
-            return signal.map(x => Math.max(-1, Math.min(1, x * gain)));
-        }
-
         function processSignal(raw, sampleRate) {
+            const inputGain = Number(document.getElementById("inputGain").value) / 100;
+            const noiseFloor = Number(document.getElementById("noiseFloor").value);
             const hpfFreq = Number(document.getElementById("hpfFreq").value);
             const lpfFreq = Number(document.getElementById("lpfFreq").value);
-            const noiseGate = Number(document.getElementById("noiseGate").value);
             const compRatio = Number(document.getElementById("compRatio").value);
-            const volumePercent = Number(document.getElementById("volumeInput").value);
-            const minAmp = Number(document.getElementById("minAmplitude").value);
-            const maxAmp = Number(document.getElementById("maxAmplitude").value);
-            const normalizeMode = document.getElementById("normalizeMode").value;
 
             let processed = [...raw];
 
-            // 1. Áp dụng Filters
-            processed = applyFilters(processed, hpfFreq, lpfFreq, sampleRate);
+            // 1. Input Gain
+            processed = processed.map(x => x * inputGain);
+            debugInfo.inputPeak = calculatePeak(processed);
 
-            // 2. Noise Gate
-            processed = applyNoiseGate(processed, noiseGate);
+            // 2. HPF
+            processed = applyHPF(processed, hpfFreq, sampleRate);
 
-            // 3. Compressor
+            // 3. LPF
+            processed = applyLPF(processed, lpfFreq, sampleRate);
+
+            // 4. Noise Floor (Gating)
+            processed = processed.map(x => Math.abs(x) < noiseFloor ? 0 : x);
+
+            // 5. Compressor
             processed = applyCompressor(processed, compRatio);
 
-            // 4. Volume
-            const volumeGain = volumePercent / 100;
-            processed = processed.map(x => x * volumeGain);
-
-            // 5. Debug
-            debugInfo.peakLevel = calculatePeak(processed);
+            // 6. Check clipping
+            const outputPeak = calculatePeak(processed);
+            debugInfo.outputPeak = outputPeak;
+            debugInfo.peakClipping = outputPeak > 0.95;
             debugInfo.rmsLevel = calculateRMS(processed);
-            debugInfo.gainApplied = volumeGain;
-
-            // 6. Normalize
-            if (normalizeMode !== 'off') {
-                processed = normalizeSignal(processed, normalizeMode, minAmp, maxAmp);
-            } else {
-                processed = processed.map(x => {
-                    if (Math.abs(x) < minAmp) return 0;
-                    return Math.max(-maxAmp, Math.min(maxAmp, x));
-                });
-            }
+            debugInfo.gainApplied = inputGain;
 
             return { processed, rawForDrawing: [...raw] };
         }
@@ -778,52 +805,39 @@
             };
         }
 
-        function autoCalibrate(result) {
-            const rpmStddev = result.rpmStddev;
-            const peakCount = result.peakCount;
-            const duration = result.duration;
-            const peakDensity = peakCount / Math.max(duration, 0.1);
+        function updateSignalWarning() {
+            const warning = document.getElementById('signalWarning');
+            let message = '';
+            let type = 'info';
 
-            let recommendations = [];
-            let thrValue = Number(document.getElementById("thr").value);
-            let smoothValue = Number(document.getElementById("smooth").value);
-
-            if (rpmStddev > 200) {
-                if (thrValue < 1.2) {
-                    thrValue = Math.min(1.5, thrValue + 0.1);
-                    recommendations.push("🔊 Nhiễu cao: Tăng Threshold");
-                }
+            if (debugInfo.inputPeak < 0.05) {
+                message = '⚠️ <b>Tín hiệu quá yếu!</b> Tăng Input Gain lên 150-200%.';
+                type = 'warning';
+            } else if (debugInfo.peakClipping) {
+                message = '⚠️ <b>Tín hiệu bị cắt xén!</b> Hạ Input Gain xuống 50-80%.';
+                type = 'error';
+            } else if (debugInfo.outputPeak > 0.3) {
+                message = '✅ <b>Tín hiệu tốt!</b> Mức cân bằng.';
+                type = 'success';
             }
 
-            if (rpmStddev < 50 && peakCount < 3) {
-                if (thrValue > 0.5) {
-                    thrValue = Math.max(0.3, thrValue - 0.1);
-                    recommendations.push("📉 Peak thiếu: Hạ Threshold");
-                }
+            if (message) {
+                warning.innerHTML = `<div class="calibration-status ${type}">${message}</div>`;
+            } else {
+                warning.innerHTML = '';
             }
-
-            if (peakDensity > 10) {
-                if (smoothValue < 30) {
-                    smoothValue = Math.min(30, smoothValue + 3);
-                    recommendations.push("📈 Peak quá dày: Tăng Smooth");
-                }
-            }
-
-            return { thrValue, smoothValue, recommendations };
-        }
-
-        function updateCalibrationStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('calibrationStatus');
-            statusDiv.innerHTML = `<div class="calibration-status ${type}">${message}</div>`;
         }
 
         function updateDebugInfo() {
-            debugInfo.bufferSize = realtimeBuffer.length;
             const debugDiv = document.getElementById('debugInfo');
             debugDiv.innerHTML = `
                 <b>📊 Signal Metrics:</b><br>
-                Peak: ${debugInfo.peakLevel.toFixed(3)} | RMS: ${debugInfo.rmsLevel.toFixed(3)} | Gain: ${debugInfo.gainApplied.toFixed(2)}x<br>
+                Input Peak: ${debugInfo.inputPeak.toFixed(3)} | 
+                Output Peak: ${debugInfo.outputPeak.toFixed(3)} | 
+                RMS: ${debugInfo.rmsLevel.toFixed(3)} | 
+                Gain: ${debugInfo.gainApplied.toFixed(2)}x<br>
                 <b>⏱️ Performance:</b> Analysis: ${debugInfo.analysisTime.toFixed(1)}ms
+                ${debugInfo.peakClipping ? ' | ⚠️ CLIPPING' : ''}
             `;
         }
 
@@ -843,8 +857,8 @@
             });
 
             buildPeakTable(result.periods, result.rpms);
-            drawRawWaveform(result.rawSignal);
-            drawFilteredWaveform(result.processedSignal);
+            drawWaveform(result.rawSignal, "rawCanvas", "#3b82f6", "Input");
+            drawWaveform(result.processedSignal, "processedCanvas", "#10b981", "Output");
             drawEnvelope();
             drawFFT();
 
@@ -852,6 +866,7 @@
                 `RPM x120: ${result.rpm120.toFixed(0)} | Peak: ${result.peakFreq.toFixed(2)} Hz | Stddev: ${result.rpmStddev.toFixed(0)}`;
             
             updateDebugInfo();
+            updateSignalWarning();
         }
 
         async function analyze() {
@@ -892,7 +907,7 @@
             `;
         }
 
-        function drawWaveform(signal, canvasId, color) {
+        function drawWaveform(signal, canvasId, color, label) {
             let c = document.getElementById(canvasId), ctx = c.getContext("2d");
             ctx.clearRect(0, 0, c.width, c.height);
             if (!signal || !signal.length) return;
@@ -903,8 +918,7 @@
                 samples.push(signal[i]);
             }
 
-            const peak = Math.max(...samples.map(x => Math.abs(x)));
-            if (peak === 0) return;
+            const peak = Math.max(...samples.map(x => Math.abs(x))) || 1;
 
             ctx.strokeStyle = color;
             ctx.lineWidth = 1;
@@ -923,14 +937,6 @@
             ctx.lineTo(c.width, c.height / 2);
             ctx.stroke();
             ctx.setLineDash([]);
-        }
-
-        function drawRawWaveform(signal) {
-            drawWaveform(signal, "rawCanvas", "#3b82f6");
-        }
-
-        function drawFilteredWaveform(signal) {
-            drawWaveform(signal, "filteredCanvas", "#10b981");
         }
 
         function drawEnvelope() {
@@ -1022,7 +1028,7 @@
                 calibrationTime = 0;
 
                 micStatus.textContent = "Recording (Calibrating...)";
-                updateCalibrationStatus("🔧 Đang hiệu chỉnh... (3 giây)", 'info');
+                document.getElementById('calibrationStatus').innerHTML = '<div class="calibration-status info">🔧 Đang hiệu chỉnh... (3 giây)</div>';
 
                 realtimeLoop();
             } catch (err) {
@@ -1037,7 +1043,7 @@
             analyser = null;
             isCalibrating = false;
             micStatus.textContent = "Stopped";
-            updateCalibrationStatus("");
+            document.getElementById('calibrationStatus').innerHTML = '';
         }
 
         function realtimeLoop() {
@@ -1060,23 +1066,9 @@
                 if (isCalibrating) {
                     calibrationTime += 0.5;
                     if (calibrationTime >= CALIBRATION_DURATION) {
-                        const calibration = autoCalibrate(result);
-                        document.getElementById("thr").value = calibration.thrValue.toFixed(2);
-                        document.getElementById("smooth").value = calibration.smoothValue;
-                        
-                        let message = "✅ Hiệu chỉnh hoàn tất!<br>";
-                        if (calibration.recommendations.length > 0) {
-                            message += calibration.recommendations.join("<br>");
-                        } else {
-                            message += "Thông số tối ưu!";
-                        }
-                        
-                        updateCalibrationStatus(message, 'success');
+                        document.getElementById('calibrationStatus').innerHTML = '<div class="calibration-status success">✅ Hiệu chỉnh hoàn tất! Bắt đầu đo RPM...</div>';
                         isCalibrating = false;
                         micStatus.textContent = "Recording (Live)";
-                    } else {
-                        const progress = Math.round((calibrationTime / CALIBRATION_DURATION) * 100);
-                        updateCalibrationStatus(`🔧 Đang hiệu chỉnh... ${progress}% (Peaks: ${result.peakCount})`, 'info');
                     }
                 }
                 
@@ -1105,13 +1097,18 @@
             drawEnvelope();
         }
 
+        function toggleAdvanced() {
+            const section = document.getElementById('advancedSection');
+            section.classList.toggle('show');
+        }
+
         function resetParameters() {
             Object.keys(DEFAULT_PARAMS).forEach(key => {
                 const elem = document.getElementById(key);
                 if (elem) elem.value = DEFAULT_PARAMS[key];
             });
             updateDisplays();
-            updateCalibrationStatus("");
+            document.getElementById('signalWarning').innerHTML = '';
             
             if (G.sm) {
                 const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
@@ -1136,18 +1133,17 @@
         }
 
         function updateDisplays() {
-            document.getElementById("hpfDisplay").textContent = document.getElementById("hpfFreq").value + " Hz";
-            document.getElementById("lpfDisplay").textContent = document.getElementById("lpfFreq").value + " Hz";
-            document.getElementById("noiseGateDisplay").textContent = Number(document.getElementById("noiseGate").value).toFixed(2);
-            document.getElementById("compRatioDisplay").textContent = Number(document.getElementById("compRatio").value).toFixed(1) + ":1";
-            document.getElementById("volumeDisplay").textContent = document.getElementById("volumeInput").value + "%";
-            document.getElementById("minAmpDisplay").textContent = Number(document.getElementById("minAmplitude").value).toFixed(2);
-            document.getElementById("maxAmpDisplay").textContent = Number(document.getElementById("maxAmplitude").value).toFixed(2);
+            document.getElementById("inputGainDisplay").textContent = document.getElementById("inputGain").value + "%";
+            document.getElementById("noiseFloorDisplay").textContent = Number(document.getElementById("noiseFloor").value).toFixed(3);
+            document.getElementById("hpfDisplay").textContent = (Number(document.getElementById("hpfFreq").value) || 0) + " Hz";
+            const lpf = Number(document.getElementById("lpfFreq").value);
+            document.getElementById("lpfDisplay").textContent = (lpf > 0 ? lpf + " Hz" : "Tắt (0 Hz)");
+            const comp = Number(document.getElementById("compRatio").value);
+            document.getElementById("compRatioDisplay").textContent = (comp <= 1 ? "1:1 (Tắt)" : comp.toFixed(1) + ":1");
             document.getElementById("thrDisplay").textContent = Number(document.getElementById("thr").value).toFixed(2);
         }
 
-        // Event listeners
-        ["hpfFreq", "lpfFreq", "noiseGate", "compRatio", "volumeInput", "minAmplitude", "maxAmplitude", "normalizeMode", "thr", "envWin", "smooth", "peakMs"].forEach(id => {
+        ["inputGain", "noiseFloor", "hpfFreq", "lpfFreq", "compRatio", "normalizeMode", "thr", "envWin", "smooth", "peakMs"].forEach(id => {
             const elem = document.getElementById(id);
             if (elem) {
                 elem.addEventListener("change", function() {
