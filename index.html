@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>RPM Analyzer V4 - Auto Calibration</title>
+    <title>RPM Analyzer V5 - Gain Control</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -154,6 +154,32 @@
             letter-spacing: 0.5px;
         }
 
+        /* Waveform visualization */
+        .waveform-container {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        .waveform-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #4b5563;
+            margin-bottom: 8px;
+        }
+
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: auto !important;
+            max-height: 320px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+        }
+
         /* Auto Calibration Status */
         .calibration-status {
             background: #fef3c7;
@@ -181,17 +207,6 @@
             background: #e0f2fe;
             border-color: #bae6fd;
             color: #0c4a6e;
-        }
-
-        /* Đồ thị Canvas co giãn tự động */
-        canvas {
-            display: block;
-            width: 100% !important;
-            height: auto !important;
-            max-height: 320px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: #fff;
         }
 
         /* Bảng dữ liệu tự thích ứng */
@@ -255,6 +270,18 @@
             border-radius: 4px;
             margin-top: 8px;
             font-family: monospace;
+            line-height: 1.5;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #4b5563;
+            text-transform: uppercase;
+            margin-top: 12px;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 4px;
         }
 
         /* Tối ưu hóa riêng cho màn hình Mobile (< 600px) */
@@ -291,7 +318,7 @@
 
 <body>
     <div class="panel">
-        <h2>🔧 RPM Analyzer V5 - Optimized</h2>
+        <h2>🔧 RPM Analyzer V5 - Gain Control</h2>
         <div>
             <input
                 id="file"
@@ -321,7 +348,36 @@
         <div id="calibrationStatus"></div>
 
         <hr>
-        <h3>Thông số điều chỉnh</h3>
+        <div class="section-title">🔊 Điều chỉnh cường độ tín hiệu</div>
+        <div class="row">
+            <label>
+                Volume Input (%)
+                <input id="volumeInput" type="range" min="0" max="200" step="5" value="100">
+                <span class="param-display" id="volumeDisplay">100%</span>
+            </label>
+            <label>
+                Min Amplitude
+                <input id="minAmplitude" type="range" min="0" max="0.5" step="0.01" value="0.05">
+                <span class="param-display" id="minAmpDisplay">0.05</span>
+            </label>
+            <label>
+                Max Amplitude
+                <input id="maxAmplitude" type="range" min="0.1" max="1.0" step="0.05" value="0.8">
+                <span class="param-display" id="maxAmpDisplay">0.8</span>
+            </label>
+            <label>
+                Normalize
+                <select id="normalizeMode" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+                    <option value="off">Off</option>
+                    <option value="peak">Peak</option>
+                    <option value="rms">RMS</option>
+                </select>
+                <span class="param-display" id="normalizeDisplay"></span>
+            </label>
+        </div>
+
+        <hr>
+        <div class="section-title">📊 Tham số phân tích</div>
         <div class="row">
             <label>
                 Envelope
@@ -360,6 +416,17 @@
     </div>
 
     <div class="panel">
+        <div class="waveform-container">
+            <div class="waveform-label">📻 Raw Waveform (Input)</div>
+            <canvas id="rawCanvas" width="1400" height="200"></canvas>
+        </div>
+        <div class="waveform-container">
+            <div class="waveform-label">🔧 Normalized Waveform (After Processing)</div>
+            <canvas id="normCanvas" width="1400" height="200"></canvas>
+        </div>
+    </div>
+
+    <div class="panel">
         <h3>📈 Envelope + Peaks</h3>
         <canvas id="envCanvas" width="1400" height="320"></canvas>
     </div>
@@ -383,8 +450,8 @@
 
     <script>
         let G = {};
-        const BUFFER_DURATION = 3; // Chỉ giữ 3 giây dữ liệu mới nhất
-        const CALIBRATION_DURATION = 3; // 3 seconds to calibrate
+        const BUFFER_DURATION = 3;
+        const CALIBRATION_DURATION = 3;
 
         let micContext = null;
         let analyser = null;
@@ -395,23 +462,28 @@
         let calibrationTime = 0;
 
         let realtimeBuffer = [];
-        let bufferStartTime = 0;
+        let normalizationBuffer = []; // Để tính normalization
 
-        // Default parameters
         const DEFAULT_PARAMS = {
             envWin: 32,
             smooth: 15,
             thr: 0.75,
             peakMs: 70,
-            viewSec: 1
+            viewSec: 1,
+            volumeInput: 100,
+            minAmplitude: 0.05,
+            maxAmplitude: 0.8,
+            normalizeMode: 'off'
         };
 
-        // Debug info
         let debugInfo = {
             bufferSize: 0,
             lastChunkSize: 0,
             analysisTime: 0,
-            totalSamples: 0
+            totalSamples: 0,
+            peakLevel: 0,
+            rmsLevel: 0,
+            gainApplied: 1
         };
 
         function median(a) {
@@ -425,6 +497,75 @@
             const mean = a.reduce((x, y) => x + y, 0) / a.length;
             const variance = a.reduce((x, y) => x + Math.pow(y - mean, 2), 0) / a.length;
             return Math.sqrt(variance);
+        }
+
+        // Tính RMS của signal
+        function calculateRMS(signal) {
+            if (!signal.length) return 0;
+            const sum = signal.reduce((acc, val) => acc + val * val, 0);
+            return Math.sqrt(sum / signal.length);
+        }
+
+        // Tính Peak của signal
+        function calculatePeak(signal) {
+            if (!signal.length) return 0;
+            return Math.max(...signal.map(x => Math.abs(x)));
+        }
+
+        // Normalize signal theo RMS hoặc Peak
+        function normalizeSignal(signal, mode, targetMin, targetMax) {
+            if (mode === 'off' || !signal.length) return signal;
+
+            let reference = 0;
+            if (mode === 'rms') {
+                reference = calculateRMS(signal);
+            } else if (mode === 'peak') {
+                reference = calculatePeak(signal);
+            }
+
+            if (reference === 0) return signal;
+
+            // Tính gain để đưa signal vào range [targetMin, targetMax]
+            const targetRange = targetMax - targetMin;
+            const desiredPeak = targetMin + targetRange / 2;
+            const gain = desiredPeak / reference;
+
+            return signal.map(x => Math.max(-1, Math.min(1, x * gain)));
+        }
+
+        // Áp dụng volume và gain control
+        function processSignal(raw) {
+            const volumePercent = Number(document.getElementById("volumeInput").value);
+            const minAmp = Number(document.getElementById("minAmplitude").value);
+            const maxAmp = Number(document.getElementById("maxAmplitude").value);
+            const normalizeMode = document.getElementById("normalizeMode").value;
+
+            let processed = [...raw];
+
+            // 1. Áp dụng Volume Input
+            const volumeGain = volumePercent / 100;
+            processed = processed.map(x => x * volumeGain);
+
+            // 2. Tính Peak và RMS trước normalize
+            const peakBefore = calculatePeak(processed);
+            const rmsBefore = calculateRMS(processed);
+
+            // 3. Normalize nếu cần
+            if (normalizeMode !== 'off') {
+                processed = normalizeSignal(processed, normalizeMode, minAmp, maxAmp);
+            } else {
+                // Hard clipping để giới hạn amplitude
+                processed = processed.map(x => {
+                    if (Math.abs(x) < minAmp) return 0; // Gạt bỏ tín hiệu dưới threshold
+                    return Math.max(-maxAmp, Math.min(maxAmp, x)); // Giới hạn cường độ
+                });
+            }
+
+            debugInfo.peakLevel = peakBefore;
+            debugInfo.rmsLevel = rmsBefore;
+            debugInfo.gainApplied = volumeGain;
+
+            return processed;
         }
 
         function fftMag(signal) {
@@ -445,67 +586,45 @@
         function analyzeSamples(raw, sr) { 
             const startAnalysis = performance.now();
             
+            // Áp dụng gain control trước khi phân tích
+            const processed = processSignal(raw);
+            
             const envelopeWindow = Number(document.getElementById("envWin").value); 
             const smoothN = Number(document.getElementById("smooth").value); 
             const thresholdFactor = Number(document.getElementById("thr").value); 
             const peakDistanceMs = Number(document.getElementById("peakMs").value); 
+
             let envelope = []; 
-            for (let i = 0; i < raw.length; i += envelopeWindow) { 
+            for (let i = 0; i < processed.length; i += envelopeWindow) { 
                 let s = 0, c = 0; 
-                for (
-                    let j = i;
-                    j < i + envelopeWindow && j < raw.length;
-                    j++
-                ) {
-                    s += Math.abs(raw[j]);
+                for (let j = i; j < i + envelopeWindow && j < processed.length; j++) {
+                    s += Math.abs(processed[j]);
                     c++;
                 }
-
                 envelope.push(s / c);
             }
 
             let sm = [];
-
             for (let i = 0; i < envelope.length; i++) {
-
                 let s = 0, c = 0;
-
-                for (
-                    let j = i - smoothN;
-                    j <= i + smoothN;
-                    j++
-                ) {
-
-                    if (
-                        j >= 0 &&
-                        j < envelope.length
-                    ) {
+                for (let j = i - smoothN; j <= i + smoothN; j++) {
+                    if (j >= 0 && j < envelope.length) {
                         s += envelope[j];
                         c++;
                     }
                 }
-
                 sm.push(s / c);
             }
 
-            const mean =
-                sm.reduce((a, b) => a + b, 0) / sm.length;
-
-            const threshold =
-                mean * thresholdFactor;
-
-            const minDist =
-                Math.floor(
-                    peakDistanceMs / 1000
-                    *
-                    sr / envelopeWindow
-                );
+            const mean = sm.reduce((a, b) => a + b, 0) / sm.length;
+            const threshold = mean * thresholdFactor;
+            const minDist = Math.floor(peakDistanceMs / 1000 * sr / envelopeWindow);
 
             let peaks = [];
             let last = -999999;
 
             for (let i = 1; i < sm.length - 1; i++) { 
-                if ( sm[i] > threshold && sm[i] > sm[i - 1] && sm[i] > sm[i + 1] ) { 
+                if (sm[i] > threshold && sm[i] > sm[i - 1] && sm[i] > sm[i + 1]) { 
                     if (i - last > minDist) { 
                         peaks.push(i);
                         last = i;
@@ -517,18 +636,9 @@
             let rpms = [];
 
             for(let i=1;i<peaks.length;i++){
-                let period =
-                    (peaks[i]-peaks[i-1])
-                    *
-                    envelopeWindow
-                    /
-                    sr;
-
+                let period = (peaks[i]-peaks[i-1]) * envelopeWindow / sr;
                 periods.push(period);
-
-                rpms.push(
-                    120 / period
-                );
+                rpms.push(120 / period);
             }
 
             const medPeriod = median(periods); 
@@ -538,11 +648,10 @@
             const fft = fftMag(sm); 
             let maxI = 0; 
             for (let i = 1; i < fft.length; i++) { 
-                if (fft[i] > fft[maxI])
-                    maxI = i;
+                if (fft[i] > fft[maxI]) maxI = i;
             } 
             const envRate = sr / envelopeWindow; 
-            const fftFreq = maxI * envRate / Math.min( 2048, sm.length );
+            const fftFreq = maxI * envRate / Math.min(2048, sm.length);
 
             debugInfo.analysisTime = performance.now() - startAnalysis;
 
@@ -561,7 +670,9 @@
                 sr,
                 envelopeWindow,
                 rpmStddev: stddev(rpms),
-                peakCount: peaks.length
+                peakCount: peaks.length,
+                rawSignal: raw,
+                processedSignal: processed
             };
         }
 
@@ -569,15 +680,12 @@
             const rpmStddev = result.rpmStddev;
             const peakCount = result.peakCount;
             const duration = result.duration;
-
-            // Phát hiện peak giả: số peak quá nhiều trong khoảng thời gian ngắn
             const peakDensity = peakCount / Math.max(duration, 0.1);
 
             let recommendations = [];
             let thrValue = Number(document.getElementById("thr").value);
             let smoothValue = Number(document.getElementById("smooth").value);
 
-            // 1. Nếu RPM variance cao → có nhiều nhiễu → tăng threshold
             if (rpmStddev > 200) {
                 if (thrValue < 1.2) {
                     thrValue = Math.min(1.5, thrValue + 0.1);
@@ -585,7 +693,6 @@
                 }
             }
 
-            // 2. Nếu RPM variance thấp nhưng thiếu peak → hạ threshold
             if (rpmStddev < 50 && peakCount < 3) {
                 if (thrValue > 0.5) {
                     thrValue = Math.max(0.3, thrValue - 0.1);
@@ -593,7 +700,6 @@
                 }
             }
 
-            // 3. Nếu peak density quá cao → tăng smooth hoặc peak ms
             if (peakDensity > 10) {
                 if (smoothValue < 30) {
                     smoothValue = Math.min(30, smoothValue + 3);
@@ -601,7 +707,6 @@
                 }
             }
 
-            // 4. Nếu peak density quá thấp nhưng std cao → giảm smooth
             if (peakDensity < 2 && rpmStddev > 100) {
                 if (smoothValue > 10) {
                     smoothValue = Math.max(10, smoothValue - 2);
@@ -623,15 +728,16 @@
             
             const debugDiv = document.getElementById('debugInfo');
             debugDiv.innerHTML = `
+                <b>📊 Signal Metrics:</b><br>
                 Buffer: ${(debugInfo.bufferSize / 1024).toFixed(1)}KB (${debugInfo.totalSamples}s) | 
-                Last chunk: ${(debugInfo.lastChunkSize / 1024).toFixed(1)}KB | 
-                Analysis: ${debugInfo.analysisTime.toFixed(1)}ms | 
-                Update: 500ms
+                Peak Level: ${debugInfo.peakLevel.toFixed(3)} | 
+                RMS Level: ${debugInfo.rmsLevel.toFixed(3)} | 
+                Gain: ${debugInfo.gainApplied.toFixed(2)}x<br>
+                <b>⏱️ Performance:</b> Analysis: ${debugInfo.analysisTime.toFixed(1)}ms | Update: 500ms
             `;
         }
 
         function updateUI(result) {
-
             G = {
                 ...result,
                 start: G.start || 0
@@ -641,10 +747,7 @@
                 sampleRate: result.sr,
                 duration: result.duration,
                 peakCount: result.peaks.length,
-                medPeriod:
-                    result.peakFreq
-                        ? 1000 / result.peakFreq
-                        : 0,
+                medPeriod: result.peakFreq ? 1000 / result.peakFreq : 0,
                 peakFreq: result.peakFreq,
                 fftFreq: result.fftFreq,
                 rpm120: result.rpm120,
@@ -652,13 +755,10 @@
                 rpmStddev: result.rpmStddev
             });
 
-            buildPeakTable(
-                result.periods,
-                result.rpms
-            );
-
+            buildPeakTable(result.periods, result.rpms);
+            drawRawWaveform(result.rawSignal);
+            drawNormalizedWaveform(result.processedSignal);
             drawEnvelope();
-
             drawFFT();
 
             document.getElementById("liveRPM").innerHTML =
@@ -668,95 +768,121 @@
         }
 
         async function analyze() {
-
-            const f =
-                document.getElementById("file")
-                    .files[0];
-
+            const f = document.getElementById("file").files[0];
             if (!f) {
                 alert("Chọn file");
                 return;
             }
 
-            const ctx =
-                new AudioContext();
+            const ctx = new AudioContext();
+            const ab = await f.arrayBuffer();
+            const audio = await ctx.decodeAudioData(ab);
 
-            const ab =
-                await f.arrayBuffer();
-
-            const audio =
-                await ctx.decodeAudioData(ab);
-
-            const result =
-                analyzeSamples(
-                    audio.getChannelData(0),
-                    audio.sampleRate
-                );
+            const result = analyzeSamples(
+                audio.getChannelData(0),
+                audio.sampleRate
+            );
 
             updateUI(result);
-
         }
 
-        function buildPeakTable(
-            periods,
-            rpms
-        ) {
-
-            peakTable.innerHTML =
-                "<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>";
+        function buildPeakTable(periods, rpms) {
+            peakTable.innerHTML = "<tr><th>#</th><th>Time(s)</th><th>Period(ms)</th><th>RPM</th></tr>";
 
             G.peaks.forEach((p, i) => {
+                const t = (p * G.envelopeWindow / G.sr).toFixed(3);
+                const period = i ? (periods[i - 1] * 1000).toFixed(1) : "";
+                const rpm = i ? rpms[i - 1].toFixed(0) : "";
 
-                const t =
-                    (
-                        p *
-                        G.envelopeWindow /
-                        G.sr
-                    ).toFixed(3);
-
-                const period =
-                    i
-                        ?
-                        (
-                            periods[i - 1]
-                            *
-                            1000
-                        ).toFixed(1)
-                        :
-                        "";
-
-                const rpm =
-                    i
-                        ?
-                        rpms[i - 1]
-                            .toFixed(0)
-                        :
-                        "";
-
-                peakTable.innerHTML +=
-
-                    `<tr>
-      <td>${i + 1}</td>
-      <td>${t}</td>
-      <td>${period}</td>
-      <td>${rpm}</td>
-    </tr>`;
+                peakTable.innerHTML += `<tr>
+                    <td>${i + 1}</td>
+                    <td>${t}</td>
+                    <td>${period}</td>
+                    <td>${rpm}</td>
+                </tr>`;
             });
-
         }
 
         function renderStats(s) {
             stats.innerHTML = `
- <div><b>Sample Rate</b><br>${s.sampleRate.toFixed(0)} Hz</div>
- <div><b>Duration</b><br>${s.duration.toFixed(3)} s</div>
- <div><b>Detected Peaks</b><br>${s.peakCount}</div>
- <div><b>Median Period</b><br>${s.medPeriod.toFixed(1)} ms</div>
- <div><b>Peak Frequency</b><br>${s.peakFreq.toFixed(2)} Hz</div>
- <div><b>FFT Envelope</b><br>${s.fftFreq.toFixed(2)} Hz</div>
- <div><b>RPM x120</b><br>${s.rpm120.toFixed(0)}</div>
- <div><b>RPM x240</b><br>${s.rpm240.toFixed(0)}</div>
- <div><b>RPM StdDev</b><br>${s.rpmStddev.toFixed(0)}</div>
- `;
+                <div><b>Sample Rate</b><br>${s.sampleRate.toFixed(0)} Hz</div>
+                <div><b>Duration</b><br>${s.duration.toFixed(3)} s</div>
+                <div><b>Detected Peaks</b><br>${s.peakCount}</div>
+                <div><b>Median Period</b><br>${s.medPeriod.toFixed(1)} ms</div>
+                <div><b>Peak Frequency</b><br>${s.peakFreq.toFixed(2)} Hz</div>
+                <div><b>FFT Envelope</b><br>${s.fftFreq.toFixed(2)} Hz</div>
+                <div><b>RPM x120</b><br>${s.rpm120.toFixed(0)}</div>
+                <div><b>RPM x240</b><br>${s.rpm240.toFixed(0)}</div>
+                <div><b>RPM StdDev</b><br>${s.rpmStddev.toFixed(0)}</div>
+            `;
+        }
+
+        function drawRawWaveform(signal) {
+            let c = rawCanvas, ctx = c.getContext("2d");
+            ctx.clearRect(0, 0, c.width, c.height);
+            if (!signal || !signal.length) return;
+
+            // Lấy sample nhỏ để hiển thị (tối đa 1000 điểm)
+            const step = Math.max(1, Math.floor(signal.length / 1000));
+            const samples = [];
+            for (let i = 0; i < signal.length; i += step) {
+                samples.push(signal[i]);
+            }
+
+            const peak = Math.max(...samples.map(x => Math.abs(x)));
+            if (peak === 0) return;
+
+            ctx.strokeStyle = "#3b82f6";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            samples.forEach((v, i) => {
+                let x = i * c.width / samples.length;
+                let y = c.height / 2 - (v / peak) * (c.height / 2);
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            });
+            ctx.stroke();
+
+            // Vẽ centerline
+            ctx.strokeStyle = "#d1d5db";
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(0, c.height / 2);
+            ctx.lineTo(c.width, c.height / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawNormalizedWaveform(signal) {
+            let c = normCanvas, ctx = c.getContext("2d");
+            ctx.clearRect(0, 0, c.width, c.height);
+            if (!signal || !signal.length) return;
+
+            const step = Math.max(1, Math.floor(signal.length / 1000));
+            const samples = [];
+            for (let i = 0; i < signal.length; i += step) {
+                samples.push(signal[i]);
+            }
+
+            const peak = Math.max(...samples.map(x => Math.abs(x)));
+            if (peak === 0) return;
+
+            ctx.strokeStyle = "#10b981";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            samples.forEach((v, i) => {
+                let x = i * c.width / samples.length;
+                let y = c.height / 2 - (v / peak) * (c.height / 2);
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            });
+            ctx.stroke();
+
+            ctx.strokeStyle = "#d1d5db";
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(0, c.height / 2);
+            ctx.lineTo(c.width, c.height / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
         }
 
         function drawEnvelope() {
@@ -765,10 +891,7 @@
 
             if (!G.sm) return;
 
-            let win =
-                Number(
-                    document.getElementById("viewSec").value
-                );
+            let win = Number(document.getElementById("viewSec").value);
             let end = G.start + win;
 
             viewInfo.textContent = `${G.start.toFixed(2)}s → ${Math.min(end, G.duration).toFixed(2)}s`;
@@ -782,7 +905,6 @@
             let max = G.threshold;
             for (let v of arr) if (v > max) max = v;
 
-            // Draw envelope curve
             ctx.strokeStyle = "#2563eb";
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -793,7 +915,6 @@
             });
             ctx.stroke();
 
-            // Draw threshold line
             ctx.strokeStyle = "#ef4444";
             ctx.lineWidth = 1;
             ctx.setLineDash([5, 5]);
@@ -804,7 +925,6 @@
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // Draw peaks
             ctx.strokeStyle = "#10b981";
             ctx.lineWidth = 2;
             ctx.fillStyle = "#10b981";
@@ -841,39 +961,20 @@
 
         async function startMic() {
             try {
-                micContext =
-                    new AudioContext();
+                micContext = new AudioContext();
+                micStream = await navigator.mediaDevices.getUserMedia({audio: true});
 
-                micStream =
-                    await navigator.mediaDevices
-                        .getUserMedia({
-                            audio: true
-                        });
+                const source = micContext.createMediaStreamSource(micStream);
 
-                const source =
-                    micContext
-                        .createMediaStreamSource(
-                            micStream
-                        );
-
-                const hp =
-                    micContext
-                        .createBiquadFilter();
-
+                const hp = micContext.createBiquadFilter();
                 hp.type = "highpass";
                 hp.frequency.value = 10;
 
-                const lp =
-                    micContext
-                        .createBiquadFilter();
-
+                const lp = micContext.createBiquadFilter();
                 lp.type = "lowpass";
                 lp.frequency.value = 200;
 
-                analyser =
-                    micContext
-                        .createAnalyser();
-
+                analyser = micContext.createAnalyser();
                 analyser.fftSize = 4096;
 
                 source.connect(hp);
@@ -881,50 +982,36 @@
                 lp.connect(analyser);
 
                 realtimeBuffer = [];
-                bufferStartTime = performance.now();
                 isCalibrating = true;
                 calibrationTime = 0;
 
-                micStatus.textContent =
-                    "Recording (Calibrating...)";
-
+                micStatus.textContent = "Recording (Calibrating...)";
                 updateCalibrationStatus("🔧 Đang hiệu chỉnh... (3 giây)", 'info');
 
                 realtimeLoop();
             } catch (err) {
                 alert("Không thể truy cập micro: " + err.message);
             }
-
         }
 
         function stopMic() {
-
             if (micStream) {
-
-                micStream
-                    .getTracks()
-                    .forEach(t => t.stop());
+                micStream.getTracks().forEach(t => t.stop());
             }
-
             analyser = null;
             isCalibrating = false;
-
-            micStatus.textContent =
-                "Stopped";
-            
+            micStatus.textContent = "Stopped";
             updateCalibrationStatus("");
         }
 
         function realtimeLoop() {
-
             if (!analyser) return;
 
             const buf = new Float32Array(analyser.fftSize);
             analyser.getFloatTimeDomainData(buf);
             realtimeBuffer.push(...buf);
-            debugInfo.lastChunkSize = buf.length * 4; // 4 bytes per float32
+            debugInfo.lastChunkSize = buf.length * 4;
 
-            // Giữ chỉ 3 giây dữ liệu mới nhất (tối ưu bộ nhớ)
             let maxSamples = BUFFER_DURATION * micContext.sampleRate;
             if (realtimeBuffer.length > maxSamples) {
                 realtimeBuffer = realtimeBuffer.slice(realtimeBuffer.length - maxSamples);
@@ -935,12 +1022,10 @@
             if(now - lastUpdate > 500){
                 const result = analyzeSamples(Float32Array.from(realtimeBuffer), micContext.sampleRate);
                 
-                // Auto-calibration during first 3 seconds
                 if (isCalibrating) {
                     calibrationTime += 0.5;
                     if (calibrationTime >= CALIBRATION_DURATION) {
                         const calibration = autoCalibrate(result);
-                        
                         document.getElementById("thr").value = calibration.thrValue.toFixed(2);
                         document.getElementById("smooth").value = calibration.smoothValue;
                         
@@ -991,17 +1076,58 @@
             document.getElementById("thr").value = DEFAULT_PARAMS.thr;
             document.getElementById("peakMs").value = DEFAULT_PARAMS.peakMs;
             document.getElementById("viewSec").value = DEFAULT_PARAMS.viewSec;
+            document.getElementById("volumeInput").value = DEFAULT_PARAMS.volumeInput;
+            document.getElementById("minAmplitude").value = DEFAULT_PARAMS.minAmplitude;
+            document.getElementById("maxAmplitude").value = DEFAULT_PARAMS.maxAmplitude;
+            document.getElementById("normalizeMode").value = DEFAULT_PARAMS.normalizeMode;
             
+            updateVolumeDisplay();
             updateCalibrationStatus("");
             
-            // Re-analyze if data exists
             if (G.sm) {
                 const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
                 updateUI(result);
             }
         }
 
-        // Update display values in real-time
+        function updateVolumeDisplay() {
+            document.getElementById("volumeDisplay").textContent = document.getElementById("volumeInput").value + "%";
+            document.getElementById("minAmpDisplay").textContent = Number(document.getElementById("minAmplitude").value).toFixed(2);
+            document.getElementById("maxAmpDisplay").textContent = Number(document.getElementById("maxAmplitude").value).toFixed(2);
+        }
+
+        // Event listeners
+        document.getElementById("volumeInput").addEventListener("input", function() {
+            updateVolumeDisplay();
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
+        document.getElementById("minAmplitude").addEventListener("input", function() {
+            updateVolumeDisplay();
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
+        document.getElementById("maxAmplitude").addEventListener("input", function() {
+            updateVolumeDisplay();
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
+        document.getElementById("normalizeMode").addEventListener("change", function() {
+            if (G.sm) {
+                const result = analyzeSamples(Float32Array.from(realtimeBuffer || []), G.sr || 44100);
+                updateUI(result);
+            }
+        });
+
         document.getElementById("thr").addEventListener("input", function() {
             document.getElementById("thrDisplay").textContent = this.value;
             if (G.sm) {
